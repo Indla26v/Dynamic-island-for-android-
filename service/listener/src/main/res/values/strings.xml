@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="listener_label">Island</string>
+    <string name="test_channel_name">Island test</string>
+    <string name="test_channel_description">Used by the Send test notification button</string>
+</resources>

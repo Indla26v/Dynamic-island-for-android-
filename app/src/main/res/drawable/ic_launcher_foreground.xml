@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A plain black pill with a small dot: an island, not any company's imagery. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M40,45h28a9,9 0,0 1,0 18h-28a9,9 0,0 1,0 -18z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M64,54m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+</vector>

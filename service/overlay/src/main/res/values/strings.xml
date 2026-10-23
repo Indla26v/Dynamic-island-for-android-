@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_label">Island</string>
+    <string name="accessibility_description">Island uses this permission only to draw the island over the status bar, at the camera cutout, and to know which app is in front so it can stay out of your way. It does not read, collect or share what is on your screen, and Island has no internet access.</string>
+</resources>

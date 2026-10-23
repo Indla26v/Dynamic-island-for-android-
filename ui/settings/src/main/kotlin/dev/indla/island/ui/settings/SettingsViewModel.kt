@@ -1,0 +1,108 @@
+package dev.indla.island.ui.settings
+
+import android.content.Context
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.indla.island.data.SettingsRepository
+import dev.indla.island.data.rules.AppRuleRepository
+import dev.indla.island.engine.IslandEngine
+import dev.indla.island.model.AppRule
+import dev.indla.island.model.DefaultApps
+import dev.indla.island.model.GestureMap
+import dev.indla.island.model.IslandAppearance
+import dev.indla.island.model.IslandSettings
+import dev.indla.island.model.ServiceHealth
+import dev.indla.island.model.WhenToShow
+import dev.indla.island.service.listener.FixtureEntry
+import dev.indla.island.service.listener.FixtureRecorder
+import dev.indla.island.service.listener.selftest.TestNotificationPoster
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+@HiltViewModel
+class SettingsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val settingsRepo: SettingsRepository,
+    private val rulesRepo: AppRuleRepository,
+    private val engine: IslandEngine,
+    private val poster: TestNotificationPoster,
+    private val installedApps: InstalledApps,
+    private val recorder: FixtureRecorder,
+) : ViewModel() {
+    /** Null until DataStore has been read, so onboarding never flashes for returning users. */
+    val settings: StateFlow<IslandSettings?> = settingsRepo.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val rules: StateFlow<Map<String, AppRule>> = rulesRepo.rules.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+    val health: StateFlow<ServiceHealth> = engine.health
+    val fixtures: StateFlow<List<FixtureEntry>> = recorder.entries
+
+    private val _permissions = MutableStateFlow(Permissions.status(context))
+    val permissions: StateFlow<PermissionStatus> = _permissions.asStateFlow()
+
+    private val _apps = MutableStateFlow<List<AppEntry>?>(null)
+    val apps: StateFlow<List<AppEntry>?> = _apps.asStateFlow()
+
+    private var testRound = 0
+
+    init {
+        viewModelScope.launch { _apps.value = installedApps.load() }
+    }
+
+    fun refreshPermissions() {
+        _permissions.value = Permissions.status(context)
+    }
+
+    fun setEnabled(enabled: Boolean) = update { it.copy(enabled = enabled) }
+
+    fun updateAppearance(transform: (IslandAppearance) -> IslandAppearance) =
+        viewModelScope.launch { settingsRepo.updateAppearance(transform) }
+
+    fun updateWhenToShow(transform: (WhenToShow) -> WhenToShow) = update { it.copy(whenToShow = transform(it.whenToShow)) }
+
+    fun updateGestures(transform: (GestureMap) -> GestureMap) = update { it.copy(gestures = transform(it.gestures)) }
+
+    fun setAutoHide(seconds: Int) = update { it.copy(autoHideSeconds = seconds) }
+
+    fun acceptDisclosure() = update { it.copy(accessibilityDisclosureAccepted = true) }
+
+    fun ruleFor(packageName: String): AppRule = rules.value[packageName] ?: DefaultApps.defaultRule(packageName)
+
+    fun saveRule(rule: AppRule) = viewModelScope.launch { rulesRepo.save(rule) }
+
+    /** Last onboarding step: the checked apps show, everything else in the list stays off. */
+    fun finishOnboarding(selected: Set<String>) = viewModelScope.launch {
+        val apps = _apps.value.orEmpty()
+        rulesRepo.saveAll(apps.map { ruleFor(it.packageName).copy(show = it.packageName in selected) })
+        settingsRepo.update { it.copy(onboardingDone = true) }
+    }
+
+    fun sendTestNotification(): Boolean {
+        if (!poster.canPost()) return false
+        poster.post(testRound++)
+        return true
+    }
+
+    fun setPositionEditing(editing: Boolean) = engine.setPositionEditing(editing)
+
+    fun nudge(dxDp: Float, dyDp: Float) = updateAppearance {
+        it.copy(offsetXDp = it.offsetXDp + dxDp, offsetYDp = (it.offsetYDp + dyDp).coerceIn(-40f, 160f))
+    }
+
+    fun resetPosition() = updateAppearance { it.copy(offsetXDp = 0f, offsetYDp = 0f) }
+
+    fun clearFixtures() = recorder.clear()
+
+    private fun update(transform: (IslandSettings) -> IslandSettings) {
+        viewModelScope.launch { settingsRepo.update(transform) }
+    }
+
+    override fun onCleared() {
+        engine.setPositionEditing(false)
+    }
+}
