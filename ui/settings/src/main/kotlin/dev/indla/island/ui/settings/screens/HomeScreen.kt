@@ -1,28 +1,37 @@
 package dev.indla.island.ui.settings.screens
 
 import android.service.notification.NotificationListenerService
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Shield
-import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.indla.island.model.IslandSettings
@@ -35,6 +44,7 @@ import dev.indla.island.ui.settings.components.GlassPill
 import dev.indla.island.ui.settings.components.GlassRow
 import dev.indla.island.ui.settings.components.IslandPreview
 import dev.indla.island.ui.settings.components.RowDivider
+import dev.indla.island.ui.settings.components.Space
 import dev.indla.island.ui.settings.components.StatusDot
 import dev.indla.island.ui.settings.components.TabScaffold
 import dev.indla.island.ui.settings.theme.LocalGlass
@@ -52,78 +62,77 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val glass = LocalGlass.current
+    val checks = listOf(
+        Check(
+            title = "Notification access",
+            icon = Icons.Rounded.NotificationsActive,
+            ok = permissions.notificationAccess && health.listenerConnected,
+            problem = if (permissions.notificationAccess) "Android stopped the listener" else "Needed to read what to show",
+            fixLabel = if (permissions.notificationAccess) "Reconnect" else "Allow",
+            fix = {
+                if (permissions.notificationAccess) {
+                    NotificationListenerService.requestRebind(IslandNotificationListener.component(context))
+                } else {
+                    Permissions.openNotificationAccess(context)
+                }
+            },
+        ),
+        Check(
+            title = "Draw over the status bar",
+            icon = Icons.Rounded.Layers,
+            ok = permissions.accessibility && health.overlayConnected,
+            problem = "Accessibility service is off",
+            fixLabel = "Turn on",
+            fix = { Permissions.openAccessibility(context) },
+        ),
+        Check(
+            title = "Battery",
+            icon = Icons.Rounded.BatteryChargingFull,
+            ok = permissions.batteryUnrestricted,
+            problem = "Android may stop Island in the background",
+            fixLabel = "Fix",
+            fix = { Permissions.requestBatteryExemption(context) },
+        ),
+    )
+    val problems = checks.count { !it.ok }
+    var showDetails by rememberSaveable { mutableStateOf(false) }
+
     TabScaffold(
         title = "Island",
         pinned = { IslandPreview(settings.appearance, reduceTransparency) },
+        headerAction = { Switch(checked = settings.enabled, onCheckedChange = onEnabled) },
     ) {
+        // Status: one line when everything runs; the failing checks, each a one-tap fix, otherwise.
         item {
             GlassCard {
+                val chevron by animateFloatAsState(if (showDetails) 180f else 0f, label = "chevron")
                 GlassRow(
-                    title = if (settings.enabled) "Island is on" else "Island is off",
-                    subtitle = "Show notifications at the camera cutout",
-                    onClick = { onEnabled(!settings.enabled) },
+                    title = when {
+                        !settings.enabled -> "Island is off"
+                        problems == 0 -> "All set"
+                        problems == 1 -> "1 thing needs a fix"
+                        else -> "$problems things need a fix"
+                    },
+                    subtitle = when {
+                        !settings.enabled -> "Turn it on with the switch above"
+                        problems == 0 -> "Reading notifications and drawing on screen"
+                        else -> "Tap a row to fix it"
+                    },
+                    leading = { StatusDot(settings.enabled && problems == 0, 12.dp) },
+                    onClick = if (problems == 0) ({ showDetails = !showDetails }) else null,
                 ) {
-                    Switch(checked = settings.enabled, onCheckedChange = onEnabled)
+                    if (problems == 0) {
+                        Icon(Icons.Rounded.ExpandMore, "Details", tint = glass.contentSecondary, modifier = Modifier.rotate(chevron))
+                    }
                 }
-            }
-        }
-
-        item {
-            val listenerOk = permissions.notificationAccess && health.listenerConnected
-            val overlayOk = permissions.accessibility && health.overlayConnected
-            val batteryOk = permissions.batteryUnrestricted
-            val problems = listOf(listenerOk, overlayOk, batteryOk).count { !it }
-            GlassCard {
-                Row(Modifier.padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    StatusDot(problems == 0, 12.dp)
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        when (problems) {
-                            0 -> "All services running"
-                            1 -> "1 thing needs a fix"
-                            else -> "$problems things need a fix"
-                        },
-                        color = glass.content,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-                HealthRow(
-                    title = "Notification access",
-                    ok = listenerOk,
-                    detail = when {
-                        listenerOk -> "Reading notifications"
-                        permissions.notificationAccess -> "Granted, but Android stopped the listener"
-                        else -> "Needed to read what to show"
-                    },
-                    icon = Icons.Rounded.NotificationsActive,
-                    fixLabel = if (permissions.notificationAccess) "Reconnect" else "Allow",
-                    onFix = {
-                        if (permissions.notificationAccess) {
-                            NotificationListenerService.requestRebind(IslandNotificationListener.component(context))
-                        } else {
-                            Permissions.openNotificationAccess(context)
+                AnimatedVisibility(problems > 0 || showDetails) {
+                    Column {
+                        checks.forEach { check ->
+                            RowDivider()
+                            CheckRow(check)
                         }
-                    },
-                )
-                RowDivider()
-                HealthRow(
-                    title = "Draw over the status bar",
-                    ok = overlayOk,
-                    detail = if (overlayOk) "Island is on screen" else "Accessibility service is off",
-                    icon = Icons.Rounded.Layers,
-                    fixLabel = "Turn on",
-                    onFix = { Permissions.openAccessibility(context) },
-                )
-                RowDivider()
-                HealthRow(
-                    title = "Battery",
-                    ok = batteryOk,
-                    detail = if (batteryOk) "Unrestricted" else "Android may stop Island in the background",
-                    icon = Icons.Rounded.BatteryChargingFull,
-                    fixLabel = "Fix",
-                    onFix = { Permissions.requestBatteryExemption(context) },
-                )
+                    }
+                }
             }
         }
 
@@ -131,74 +140,81 @@ fun HomeScreen(
             item {
                 GlassCard(title = "Switch greyed out?") {
                     Text(
-                        "Android 13+ restricts accessibility for apps installed outside the Play Store. " +
-                            "Open App info, tap ⋮ in the corner, choose Allow restricted settings, then try again.",
+                        "Installed outside the Play Store on Android 13+? Open App info, tap ⋮, choose " +
+                            "Allow restricted settings, then turn Island on.",
                         color = glass.contentSecondary,
                         fontSize = 14.sp,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                        lineHeight = 19.sp,
+                        modifier = Modifier.padding(horizontal = Space.rowPadding),
                     )
-                    GlassPill("Open App info", { Permissions.openAppInfo(context) }, Modifier.padding(20.dp, 10.dp))
+                    GlassPill(
+                        "Open App info",
+                        { Permissions.openAppInfo(context) },
+                        compact = true,
+                        modifier = Modifier.padding(start = Space.rowPadding, top = Space.m, bottom = Space.xs),
+                    )
                 }
             }
         }
 
         item {
-            GlassPill(
-                "Send test notification",
-                onClick = onSendTest,
-                icon = Icons.Rounded.Send,
-                primary = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
-        if (showDebug) {
-            item {
-                GlassCard {
+            GlassCard {
+                GlassRow(
+                    "Send a test notification",
+                    subtitle = "Pops the island so you can try Reply",
+                    icon = Icons.AutoMirrored.Rounded.Send,
+                    onClick = onSendTest,
+                ) { Icon(Icons.Rounded.ChevronRight, null, tint = glass.contentSecondary) }
+                if (showDebug) {
+                    RowDivider()
                     GlassRow(
                         "Notification fixtures",
-                        subtitle = "Export real notifications as JSON for parser tests",
+                        subtitle = "Export notifications as JSON for parser tests",
                         icon = Icons.Rounded.BugReport,
                         onClick = onOpenFixtures,
-                    ) { Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, tint = glass.contentSecondary) }
+                    ) { Icon(Icons.Rounded.ChevronRight, null, tint = glass.contentSecondary) }
                 }
             }
         }
 
         item {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.Top) {
-                Icon(Icons.Rounded.Shield, null, tint = glass.contentSecondary, modifier = Modifier.padding(top = 2.dp))
-                Spacer(Modifier.width(10.dp))
+            Row(Modifier.fillMaxWidth().padding(horizontal = Space.rowPadding, vertical = Space.xs)) {
+                Icon(Icons.Rounded.Shield, null, tint = glass.contentSecondary, modifier = Modifier.size(16.dp).padding(top = 1.dp))
+                Spacer(Modifier.width(Space.s))
                 Text(
-                    "Island has no internet permission. Notifications are read on this phone and never leave it.",
+                    "No internet permission. Notifications are read on this phone and never leave it.",
                     color = glass.contentSecondary,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
                 )
             }
         }
     }
 }
 
+private class Check(
+    val title: String,
+    val icon: ImageVector,
+    val ok: Boolean,
+    val problem: String,
+    val fixLabel: String,
+    val fix: () -> Unit,
+)
+
 @Composable
-private fun HealthRow(
-    title: String,
-    ok: Boolean,
-    detail: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    fixLabel: String,
-    onFix: () -> Unit,
-) {
-    // When something is off, the whole row is the one-tap fix.
-    GlassRow(title, subtitle = detail, icon = icon, onClick = if (ok) null else onFix) {
-        if (ok) {
-            StatusDot(true)
+private fun CheckRow(check: Check) {
+    val glass = LocalGlass.current
+    GlassRow(
+        check.title,
+        subtitle = if (check.ok) null else check.problem,
+        icon = check.icon,
+        iconTint = if (check.ok) glass.contentSecondary else MaterialTheme.colorScheme.primary,
+        onClick = if (check.ok) null else check.fix,
+    ) {
+        if (check.ok) {
+            Text("On", color = glass.contentSecondary, fontSize = 14.sp, modifier = Modifier.padding(start = Space.s))
         } else {
-            Text(
-                fixLabel,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(start = 8.dp),
-            )
+            GlassPill(check.fixLabel, check.fix, primary = true, compact = true, modifier = Modifier.padding(start = Space.s))
         }
     }
 }

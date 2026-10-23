@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
@@ -47,10 +48,10 @@ import dev.indla.island.ui.island.IslandLayout
 import dev.indla.island.ui.island.IslandSurface
 import dev.indla.island.ui.island.PreviewSamples
 
-private val PreviewHeight = 200.dp
+private val PreviewHeight = 184.dp
 
 /** The mock phone is shown smaller than the card so even the expanded card fits with a margin. */
-private const val MockScale = 0.74f
+private const val MockScale = 0.72f
 
 /**
  * The live preview pinned on top of every tab: the real island composable on a mock of this
@@ -85,7 +86,7 @@ fun IslandPreview(appearance: IslandAppearance, reduceTransparency: Boolean, mod
                         scaleX = scale
                         scaleY = scale
                         transformOrigin = TransformOrigin(0.5f, 0f)
-                        translationY = 12.dp.toPx()
+                        translationY = 10.dp.toPx()
                         shape = RoundedCornerShape(topStart = 44.dp, topEnd = 44.dp)
                         clip = true
                     },
@@ -94,18 +95,27 @@ fun IslandPreview(appearance: IslandAppearance, reduceTransparency: Boolean, mod
                 IslandSurface(state, layout, reduceTransparency = reduceTransparency)
             }
         }
+        // State name + page dots: says what you're looking at and that tapping moves on.
         Row(
             Modifier
                 .align(Alignment.BottomEnd)
-                .padding(10.dp)
+                .padding(Space.s)
                 .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.45f))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .background(Color.Black.copy(alpha = 0.5f))
+                .padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(PreviewSamples.stepNames[step.mod(4)], color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text(PreviewSamples.stepNames[step.mod(4)], color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.width(6.dp))
-            Text("· tap to cycle", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+            repeat(PreviewSamples.stepNames.size) { i ->
+                Box(
+                    Modifier
+                        .padding(horizontal = 1.5.dp)
+                        .size(5.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = if (i == step.mod(4)) 1f else 0.35f)),
+                )
+            }
         }
     }
 }

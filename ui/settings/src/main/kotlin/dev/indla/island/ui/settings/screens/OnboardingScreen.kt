@@ -1,5 +1,7 @@
 package dev.indla.island.ui.settings.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,9 +10,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,6 +28,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,6 +41,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,6 +56,8 @@ import dev.indla.island.ui.settings.Permissions
 import dev.indla.island.ui.settings.components.GlassCard
 import dev.indla.island.ui.settings.components.GlassPill
 import dev.indla.island.ui.settings.components.IslandPreview
+import dev.indla.island.ui.settings.components.RowDivider
+import dev.indla.island.ui.settings.components.Space
 import dev.indla.island.ui.settings.theme.LocalGlass
 
 /** The Play-required prominent disclosure, shown before the system accessibility screen. */
@@ -57,6 +67,8 @@ const val ACCESSIBILITY_DISCLOSURE =
         "island can stay out of your way.\n\n" +
         "Island does not use it to read, collect or share what's on your screen, what you type, or any " +
         "personal data, and Island has no internet access. You can turn it off any time in Settings → Accessibility."
+
+private val Badge = 30.dp
 
 /** Four-step checklist that live-updates as each permission is granted. */
 @Composable
@@ -76,88 +88,115 @@ fun OnboardingScreen(
     LaunchedEffect(apps) { if (selected == null && apps != null) selected = messaging.map { it.packageName }.toSet() }
     val picked = selected.orEmpty()
     val (oemName, oemSteps) = OemBatterySteps.forManufacturer()
+    val done = listOf(permissions.notificationAccess, permissions.accessibility, permissions.batteryUnrestricted, picked.isNotEmpty())
+    val progress by animateFloatAsState(done.count { it } / 4f, label = "progress")
+    val navBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-    LazyColumn(
-        Modifier.fillMaxSize().statusBarsPadding(),
-        contentPadding = PaddingValues(16.dp, 24.dp, 16.dp, 120.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        item {
-            Column(Modifier.padding(horizontal = 8.dp, vertical = 12.dp)) {
-                Text("Set up Island", color = glass.content, fontSize = 36.sp, fontWeight = FontWeight.Bold)
-                Text("Four steps, about two minutes.", color = glass.contentSecondary, fontSize = 16.sp)
-            }
-        }
-        item { IslandPreview(settings.appearance, reduceTransparency) }
-
-        item {
-            Step(1, "Notification access", "So Island can read what to show.", permissions.notificationAccess) {
-                GlassPill("Allow", { Permissions.openNotificationAccess(context) }, primary = true)
-            }
-        }
-        item {
-            Step(2, "Accessibility", "So Island can draw over the status bar.", permissions.accessibility) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    GlassPill("Allow", {
-                        if (settings.accessibilityDisclosureAccepted) Permissions.openAccessibility(context) else showDisclosure = true
-                    }, primary = true)
-                    if (Permissions.restrictedSettingsLikely) {
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            Modifier.fillMaxSize().statusBarsPadding(),
+            contentPadding = PaddingValues(
+                start = Space.gutter,
+                end = Space.gutter,
+                top = Space.xl,
+                bottom = 48.dp + Space.l * 2 + navBar,
+            ),
+            verticalArrangement = Arrangement.spacedBy(Space.cardGap),
+        ) {
+            item {
+                Column(Modifier.padding(horizontal = Space.s)) {
+                    Text("Set up Island", color = glass.content, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(Space.xs))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "Switch greyed out? Installed outside the Play Store, Android 13+ needs: App info → ⋮ → Allow restricted settings.",
+                            "${done.count { it }} of 4 done · about two minutes",
                             color = glass.contentSecondary,
-                            fontSize = 13.sp,
+                            fontSize = 14.sp,
+                            modifier = Modifier.weight(1f),
                         )
-                        GlassPill("Open App info", { Permissions.openAppInfo(context) })
+                    }
+                    Spacer(Modifier.height(Space.s))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
+                        drawStopIndicator = {},
+                    )
+                }
+            }
+            item { IslandPreview(settings.appearance, reduceTransparency) }
+
+            item {
+                GlassCard {
+                    Step(1, "Notification access", "To read what to show", done[0], "Allow", onAction = {
+                        Permissions.openNotificationAccess(context)
+                    })
+                    RowDivider(start = Space.rowPadding + Badge + Space.m)
+                    Step(2, "Accessibility", "To draw over the status bar", done[1], "Allow", onAction = {
+                        if (settings.accessibilityDisclosureAccepted) Permissions.openAccessibility(context) else showDisclosure = true
+                    }) {
+                        if (Permissions.restrictedSettingsLikely) {
+                            Hint("Greyed out? App info → ⋮ → Allow restricted settings.")
+                            GlassPill("Open App info", { Permissions.openAppInfo(context) }, compact = true)
+                        }
+                    }
+                    RowDivider(start = Space.rowPadding + Badge + Space.m)
+                    Step(3, "Battery", "So Android doesn't stop Island", done[2], "Allow", onAction = {
+                        Permissions.requestBatteryExemption(context)
+                    }) {
+                        Hint("$oemName: " + oemSteps.joinToString(" · "))
                     }
                 }
             }
-        }
-        item {
-            Step(3, "Battery", "Unrestricted, so Android doesn't stop Island.", permissions.batteryUnrestricted) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    GlassPill("Set to Unrestricted", { Permissions.requestBatteryExemption(context) }, primary = true)
-                    Text("$oemName also needs:", color = glass.contentSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    oemSteps.forEach { Text("• $it", color = glass.contentSecondary, fontSize = 13.sp) }
-                }
-            }
-        }
-        item {
-            Step(4, "Pick apps", "Messaging apps are pre-selected. Add more later in Apps.", done = picked.isNotEmpty()) {
-                Column {
+
+            item {
+                GlassCard(title = "Pick apps") {
+                    Text(
+                        "Chat apps are pre-selected. Add more any time in Apps.",
+                        color = glass.contentSecondary,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = Space.rowPadding),
+                    )
                     if (messaging.isEmpty()) {
-                        Text("No chat apps found yet, pick any in the Apps tab later.", color = glass.contentSecondary, fontSize = 13.sp)
+                        Hint("No chat apps found; pick any in the Apps tab later.", Modifier.padding(horizontal = Space.rowPadding))
                     }
                     messaging.forEach { app ->
+                        val on = app.packageName in picked
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .clip(CircleShape)
-                                .clickable {
-                                    selected = if (app.packageName in picked) picked - app.packageName else picked + app.packageName
-                                }
-                                .padding(vertical = 4.dp),
+                                .clickable { selected = if (on) picked - app.packageName else picked + app.packageName }
+                                .padding(start = Space.rowPadding, end = Space.s),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            AppIconImage(app.packageName, 30.dp)
-                            Spacer(Modifier.width(12.dp))
+                            AppIconImage(app.packageName, 28.dp)
+                            Spacer(Modifier.width(Space.m))
                             Text(app.label, color = glass.content, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                            Checkbox(checked = app.packageName in picked, onCheckedChange = { on ->
-                                selected = if (on) picked + app.packageName else picked - app.packageName
-                            })
+                            Checkbox(checked = on, onCheckedChange = { selected = if (it) picked + app.packageName else picked - app.packageName })
                         }
                     }
                 }
             }
         }
-        item {
-            GlassPill(
-                if (permissions.essentials) "Finish" else "Finish (steps 1 and 2 needed)",
-                onClick = { onFinish(picked) },
-                primary = true,
-                enabled = permissions.essentials,
-                modifier = Modifier.fillMaxWidth().navigationBarsPadding(),
-            )
-        }
+
+        // Pinned, so finishing never needs a scroll; the list dissolves beneath it.
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(48.dp + Space.l * 3 + navBar)
+                .background(Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)))),
+        )
+        GlassPill(
+            if (permissions.essentials) "Finish" else "Finish · steps 1 and 2 needed",
+            onClick = { onFinish(picked) },
+            primary = true,
+            enabled = permissions.essentials,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(Space.l)
+                .fillMaxWidth(),
+        )
     }
 
     if (showDisclosure) {
@@ -177,29 +216,50 @@ fun OnboardingScreen(
     }
 }
 
+/** Badge, title and reason on one line with the action on the right; extra help only while pending. */
 @Composable
-private fun Step(number: Int, title: String, why: String, done: Boolean, action: @Composable () -> Unit) {
+private fun Step(
+    number: Int,
+    title: String,
+    why: String,
+    done: Boolean,
+    actionLabel: String,
+    onAction: () -> Unit,
+    extra: (@Composable () -> Unit)? = null,
+) {
     val glass = LocalGlass.current
     val scheme = MaterialTheme.colorScheme
-    GlassCard {
-        Row(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = Space.rowPadding, vertical = Space.m),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Box(
-                Modifier.size(32.dp).clip(CircleShape).background(if (done) scheme.primary else scheme.primary.copy(alpha = 0.18f)),
+                Modifier.size(Badge).clip(CircleShape).background(if (done) scheme.primary else scheme.primary.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center,
             ) {
-                if (done) Icon(Icons.Rounded.Check, null, tint = scheme.onPrimary, modifier = Modifier.size(18.dp))
-                else Text("$number", color = scheme.primary, fontWeight = FontWeight.Bold)
+                if (done) Icon(Icons.Rounded.Check, "Done", tint = scheme.onPrimary, modifier = Modifier.size(18.dp))
+                else Text("$number", color = scheme.primary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(Space.m))
             Column(Modifier.weight(1f)) {
-                Text(title, color = glass.content, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                Text(why, color = glass.contentSecondary, fontSize = 14.sp)
+                Text(title, color = glass.content, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(why, color = glass.contentSecondary, fontSize = 13.sp)
             }
+            if (!done) GlassPill(actionLabel, onAction, primary = true, compact = true, modifier = Modifier.padding(start = Space.s))
         }
-        if (!done) {
-            Box(Modifier.padding(start = 66.dp, end = 20.dp, top = 4.dp, bottom = 10.dp)) { action() }
-        } else {
-            Spacer(Modifier.height(4.dp))
+        if (extra != null) {
+            AnimatedVisibility(!done) {
+                Column(
+                    Modifier.padding(start = Space.rowPadding + Badge + Space.m, end = Space.rowPadding, bottom = Space.m),
+                    verticalArrangement = Arrangement.spacedBy(Space.s),
+                ) { extra() }
+            }
         }
     }
+}
+
+@Composable
+private fun Hint(text: String, modifier: Modifier = Modifier) {
+    Text(text, color = LocalGlass.current.contentSecondary, fontSize = 13.sp, lineHeight = 18.sp, modifier = modifier)
 }

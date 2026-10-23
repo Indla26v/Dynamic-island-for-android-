@@ -16,22 +16,21 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.KeyboardArrowLeft
-import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.OpenWith
-import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -46,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.indla.island.model.GestureAction
@@ -55,10 +55,11 @@ import dev.indla.island.model.IslandSettings
 import dev.indla.island.model.StylePreset
 import dev.indla.island.model.WhenToShow
 import dev.indla.island.ui.settings.components.GlassCard
-import dev.indla.island.ui.settings.components.GlassPill
+import dev.indla.island.ui.settings.components.GlassSliderRow
 import dev.indla.island.ui.settings.components.GlassToggleRow
 import dev.indla.island.ui.settings.components.IslandPreview
 import dev.indla.island.ui.settings.components.RowDivider
+import dev.indla.island.ui.settings.components.Space
 import dev.indla.island.ui.settings.components.TabScaffold
 import dev.indla.island.ui.settings.components.glassSurface
 import dev.indla.island.ui.settings.theme.LocalGlass
@@ -86,72 +87,79 @@ fun LookScreen(
 
     TabScaffold(title = "Look & feel", pinned = { IslandPreview(a, reduceTransparency) }) {
         item {
-            GlassCard(title = "Style") {
-                Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            GlassCard(title = "Appearance") {
+                Row(
+                    Modifier.padding(horizontal = Space.rowPadding, vertical = Space.xs),
+                    horizontalArrangement = Arrangement.spacedBy(Space.s),
+                ) {
                     StylePreset.entries.forEach { preset ->
                         PresetTile(preset, selected = a.preset == preset, modifier = Modifier.weight(1f)) {
                             onAppearance { it.copy(preset = preset) }
                         }
                     }
                 }
-            }
-        }
-
-        item {
-            GlassCard(title = "Colour") {
                 Swatches(
                     selected = a.accentArgb,
                     includeAuto = false,
                     onPick = { argb -> if (argb != null) onAppearance { it.copy(accentArgb = argb) } },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = Space.rowPadding, vertical = Space.m),
+                )
+                RowDivider(start = Space.rowPadding)
+                GlassSliderRow("Size", a.sizeScale, 0.8f..1.3f, { "${(it * 100).roundToInt()}%" }, { v ->
+                    onAppearance { it.copy(sizeScale = v) }
+                })
+                GlassSliderRow("Glass", a.glassIntensity, 0f..1f, { if (it < 0.5f) "Clear" else "Tinted" }, { v ->
+                    onAppearance { it.copy(glassIntensity = v) }
+                })
+                if (reduceTransparency) {
+                    Text(
+                        "Reduce transparency is on in system settings, so surfaces are solid.",
+                        color = glass.contentSecondary,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(horizontal = Space.rowPadding, vertical = Space.xs),
+                    )
+                }
+                GlassToggleRow(
+                    "Resting pill",
+                    a.showRestPill,
+                    { v -> onAppearance { it.copy(showRestPill = v) } },
+                    subtitle = "Keep a small pill around the camera",
                 )
             }
         }
 
         item {
-            GlassCard(title = "Size & position") {
-                SliderRow("Size", "${(a.sizeScale * 100).roundToInt()}%", a.sizeScale, 0.8f..1.3f) { v ->
-                    onAppearance { it.copy(sizeScale = v) }
-                }
-                GlassToggleRow("Show resting pill", a.showRestPill, { v -> onAppearance { it.copy(showRestPill = v) } },
-                    subtitle = "A small black pill around the camera when nothing is active")
-                RowDivider()
-                GlassToggleRow("Adjust on screen", editing, { editing = it }, icon = Icons.Rounded.OpenWith,
-                    subtitle = "Drag the real island at the top of your screen")
+            GlassCard(
+                title = "Position",
+                action = if (a.offsetXDp != 0f || a.offsetYDp != 0f) {
+                    { TextButton(onClick = onResetPosition) { Text("Reset") } }
+                } else {
+                    null
+                },
+            ) {
+                GlassToggleRow(
+                    "Adjust on screen",
+                    editing,
+                    { editing = it },
+                    subtitle = "Drag the real island, or nudge 1 dp",
+                    icon = Icons.Rounded.OpenWith,
+                )
                 if (editing) {
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                        Modifier.fillMaxWidth().padding(start = Space.textInset, end = Space.rowPadding, bottom = Space.s),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        NudgeButton(Icons.Rounded.KeyboardArrowLeft, "Left") { onNudge(-1f, 0f) }
+                        Text(
+                            "${a.offsetXDp.roundToInt()}, ${a.offsetYDp.roundToInt()} dp",
+                            color = glass.contentSecondary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                        NudgeButton(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, "Left") { onNudge(-1f, 0f) }
                         NudgeButton(Icons.Rounded.KeyboardArrowUp, "Up") { onNudge(0f, -1f) }
                         NudgeButton(Icons.Rounded.KeyboardArrowDown, "Down") { onNudge(0f, 1f) }
-                        NudgeButton(Icons.Rounded.KeyboardArrowRight, "Right") { onNudge(1f, 0f) }
-                        NudgeButton(Icons.Rounded.Refresh, "Reset", onResetPosition)
+                        NudgeButton(Icons.AutoMirrored.Rounded.KeyboardArrowRight, "Right") { onNudge(1f, 0f) }
                     }
-                    Text(
-                        "Offset ${a.offsetXDp.roundToInt()} dp, ${a.offsetYDp.roundToInt()} dp · arrows move 1 dp",
-                        color = glass.contentSecondary,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(start = 20.dp, bottom = 8.dp),
-                    )
-                }
-            }
-        }
-
-        item {
-            GlassCard(title = "Glass") {
-                SliderRow("Glass intensity", if (a.glassIntensity < 0.5f) "Clear" else "Tinted", a.glassIntensity, 0f..1f) { v ->
-                    onAppearance { it.copy(glassIntensity = v) }
-                }
-                if (reduceTransparency) {
-                    Text(
-                        "Reduce transparency is on in system settings, so Island uses solid surfaces.",
-                        color = glass.contentSecondary,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
-                    )
                 }
             }
         }
@@ -159,27 +167,38 @@ fun LookScreen(
         item {
             val w = settings.whenToShow
             GlassCard(title = "When to show") {
-                GlassToggleRow("Not for the app I'm using", w.hideInForegroundApp, { v -> onWhenToShow { it.copy(hideInForegroundApp = v) } },
-                    subtitle = "No island for a chat that's already open")
-                GlassToggleRow("Hide during full-screen video and games", w.hideInFullscreen, { v -> onWhenToShow { it.copy(hideInFullscreen = v) } })
+                GlassToggleRow("Not for the app I'm in", w.hideInForegroundApp, { v -> onWhenToShow { it.copy(hideInForegroundApp = v) } })
+                GlassToggleRow("Hide in full screen", w.hideInFullscreen, { v -> onWhenToShow { it.copy(hideInFullscreen = v) } })
                 GlassToggleRow("Hide in landscape", w.hideInLandscape, { v -> onWhenToShow { it.copy(hideInLandscape = v) } })
+                GlassToggleRow("Hide with the shade open", w.hideWhenShadeOpen, { v -> onWhenToShow { it.copy(hideWhenShadeOpen = v) } })
                 GlassToggleRow("Show on the lockscreen", w.showOnLockscreen, { v -> onWhenToShow { it.copy(showOnLockscreen = v) } })
-                GlassToggleRow("Hide while the notification shade is open", w.hideWhenShadeOpen, { v -> onWhenToShow { it.copy(hideWhenShadeOpen = v) } })
-                RowDivider()
-                SliderRow("Stay on screen", "${settings.autoHideSeconds} s", settings.autoHideSeconds.toFloat(), 3f..12f, steps = 8) { v ->
-                    onAutoHide(v.roundToInt())
-                }
+                RowDivider(start = Space.rowPadding)
+                GlassSliderRow(
+                    "Stay for",
+                    settings.autoHideSeconds.toFloat(),
+                    3f..12f,
+                    { "${it.roundToInt()} s" },
+                    { onAutoHide(it.roundToInt()) },
+                    steps = 8,
+                )
             }
         }
 
         item {
             val g = settings.gestures
-            GlassCard(title = "Gestures") {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) {
+            GlassCard(
+                title = "Gestures",
+                action = if (g != GestureMap()) {
+                    { TextButton(onClick = { onGestures { GestureMap() } }) { Text("Defaults") } }
+                } else {
+                    null
+                },
+            ) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = Space.rowPadding, vertical = Space.xs)) {
                     Spacer(Modifier.weight(1f))
-                    Text("Compact", color = glass.contentSecondary, fontSize = 12.sp, modifier = Modifier.width(118.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Expanded", color = glass.contentSecondary, fontSize = 12.sp, modifier = Modifier.width(118.dp))
+                    ColumnHeader("Compact")
+                    Spacer(Modifier.width(Space.s))
+                    ColumnHeader("Expanded")
                 }
                 GestureRow("Tap", g.compactTap, g.expandedTap,
                     { v -> onGestures { it.copy(compactTap = v) } }, { v -> onGestures { it.copy(expandedTap = v) } })
@@ -187,88 +206,64 @@ fun LookScreen(
                     { v -> onGestures { it.copy(compactSwipeDown = v) } }, { v -> onGestures { it.copy(expandedSwipeDown = v) } })
                 GestureRow("Swipe up", g.compactSwipeUp, g.expandedSwipeUp,
                     { v -> onGestures { it.copy(compactSwipeUp = v) } }, { v -> onGestures { it.copy(expandedSwipeUp = v) } })
-                GestureRow("Swipe sideways", g.compactSwipeSide, g.expandedSwipeSide,
+                GestureRow("Sideways", g.compactSwipeSide, g.expandedSwipeSide,
                     { v -> onGestures { it.copy(compactSwipeSide = v) } }, { v -> onGestures { it.copy(expandedSwipeSide = v) } })
                 GestureRow("Long press", g.compactLongPress, g.expandedLongPress,
                     { v -> onGestures { it.copy(compactLongPress = v) } }, { v -> onGestures { it.copy(expandedLongPress = v) } })
-                GlassPill("Restore defaults", { onGestures { GestureMap() } }, Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
             }
         }
     }
+}
+
+private val PickerWidth = 112.dp
+
+@Composable
+private fun ColumnHeader(text: String) {
+    Text(
+        text,
+        color = LocalGlass.current.contentSecondary,
+        fontSize = 12.sp,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.width(PickerWidth),
+    )
 }
 
 @Composable
 private fun PresetTile(preset: StylePreset, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val glass = LocalGlass.current
     val primary = MaterialTheme.colorScheme.primary
+    val shape = RoundedCornerShape(18.dp)
     Column(
         modifier
-            .clip(RoundedCornerShape(20.dp))
-            .glassSurface(RoundedCornerShape(20.dp), strong = selected)
-            .then(if (selected) Modifier.border(2.dp, primary, RoundedCornerShape(20.dp)) else Modifier)
+            .clip(shape)
+            .glassSurface(shape, strong = selected)
+            .then(if (selected) Modifier.border(2.dp, primary, shape) else Modifier)
             .clickable(onClick = onClick)
-            .padding(10.dp),
+            .padding(vertical = Space.s, horizontal = Space.xs),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Canvas(Modifier.fillMaxWidth().height(42.dp)) {
+        Canvas(Modifier.fillMaxWidth().height(30.dp)) {
             val w = size.width
             when (preset) {
-                StylePreset.CLASSIC_PILL -> drawRoundRect(Color.Black, Offset(w * 0.18f, 10.dp.toPx()), Size(w * 0.64f, 22.dp.toPx()), CornerRadius(11.dp.toPx()))
+                StylePreset.CLASSIC_PILL -> drawRoundRect(Color.Black, Offset(w * 0.2f, 6.dp.toPx()), Size(w * 0.6f, 18.dp.toPx()), CornerRadius(9.dp.toPx()))
                 StylePreset.MINIMAL -> {
-                    drawRoundRect(Color.Black, Offset(w * 0.3f, 12.dp.toPx()), Size(w * 0.4f, 18.dp.toPx()), CornerRadius(9.dp.toPx()))
-                    drawCircle(primary, 3.dp.toPx(), Offset(w * 0.62f, 21.dp.toPx()))
+                    drawRoundRect(Color.Black, Offset(w * 0.3f, 8.dp.toPx()), Size(w * 0.4f, 14.dp.toPx()), CornerRadius(7.dp.toPx()))
+                    drawCircle(primary, 2.5.dp.toPx(), Offset(w * 0.62f, 15.dp.toPx()))
                 }
-                StylePreset.NOTCH_ATTACHED -> drawRoundRect(Color.Black, Offset(w * 0.18f, 0f), Size(w * 0.64f, 28.dp.toPx()), CornerRadius(12.dp.toPx()))
+                StylePreset.NOTCH_ATTACHED -> drawRoundRect(Color.Black, Offset(w * 0.2f, 0f), Size(w * 0.6f, 22.dp.toPx()), CornerRadius(10.dp.toPx()))
             }
         }
+        Spacer(Modifier.height(Space.xs))
         Text(
             when (preset) {
-                StylePreset.CLASSIC_PILL -> "Classic pill"
+                StylePreset.CLASSIC_PILL -> "Classic"
                 StylePreset.MINIMAL -> "Minimal"
-                StylePreset.NOTCH_ATTACHED -> "Notch-attached"
+                StylePreset.NOTCH_ATTACHED -> "Attached"
             },
             color = glass.content,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
-            lineHeight = 16.sp,
-            minLines = 2,
-            maxLines = 2,
-            textAlign = TextAlign.Center,
-        )
-    }
-}
-
-@Composable
-private fun SliderRow(
-    title: String,
-    value: String,
-    current: Float,
-    range: ClosedFloatingPointRange<Float>,
-    steps: Int = 0,
-    onChange: (Float) -> Unit,
-) {
-    val glass = LocalGlass.current
-    // Local while dragging so DataStore isn't written every frame.
-    var dragging by remember { mutableStateOf(false) }
-    var local by remember { mutableFloatStateOf(current) }
-    val shown = if (dragging) local else current
-    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)) {
-        Row {
-            Text(title, color = glass.content, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-            Text(value, color = glass.contentSecondary, fontSize = 14.sp)
-        }
-        Slider(
-            value = shown,
-            onValueChange = {
-                dragging = true
-                local = it
-            },
-            onValueChangeFinished = {
-                dragging = false
-                onChange(local)
-            },
-            valueRange = range,
-            steps = steps,
+            maxLines = 1,
         )
     }
 }
@@ -277,12 +272,13 @@ private fun SliderRow(
 private fun NudgeButton(icon: ImageVector, label: String, onClick: () -> Unit) {
     Box(
         Modifier
-            .size(48.dp)
+            .padding(start = Space.xs)
+            .size(40.dp)
             .clip(CircleShape)
             .glassSurface(CircleShape, strong = true)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, label, tint = LocalGlass.current.content) }
+    ) { Icon(icon, label, tint = LocalGlass.current.content, modifier = Modifier.size(22.dp)) }
 }
 
 @Composable
@@ -294,10 +290,13 @@ private fun GestureRow(
     onExpanded: (GestureAction) -> Unit,
 ) {
     val glass = LocalGlass.current
-    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = glass.content, fontSize = 15.sp, modifier = Modifier.weight(1f))
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = Space.rowPadding, vertical = Space.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, color = glass.content, fontSize = 15.sp, modifier = Modifier.weight(1f), maxLines = 1)
         ActionPicker(compact, onCompact)
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(Space.s))
         ActionPicker(expanded, onExpanded)
     }
 }
@@ -307,16 +306,26 @@ private fun ActionPicker(value: GestureAction, onPick: (GestureAction) -> Unit) 
     var open by remember { mutableStateOf(false) }
     val glass = LocalGlass.current
     Box {
-        Box(
+        Row(
             Modifier
-                .width(118.dp)
+                .width(PickerWidth)
                 .height(36.dp)
                 .clip(CircleShape)
                 .glassSurface(CircleShape, strong = true)
                 .clickable { open = true }
-                .padding(horizontal = 12.dp),
-            contentAlignment = Alignment.CenterStart,
-        ) { Text(actionLabel(value), color = glass.content, fontSize = 13.sp, maxLines = 1) }
+                .padding(start = Space.m, end = Space.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                actionLabel(value),
+                color = glass.content,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(Icons.Rounded.UnfoldMore, null, tint = glass.contentSecondary, modifier = Modifier.size(16.dp))
+        }
         DropdownMenu(open, onDismissRequest = { open = false }) {
             GestureAction.entries.forEach { action ->
                 DropdownMenuItem(text = { Text(actionLabel(action)) }, onClick = {
@@ -334,6 +343,6 @@ private fun actionLabel(a: GestureAction) = when (a) {
     GestureAction.HIDE -> "Hide"
     GestureAction.COLLAPSE -> "Collapse"
     GestureAction.SWITCH_ITEM -> "Switch item"
-    GestureAction.QUICK_ACTIONS -> "Quick actions"
+    GestureAction.QUICK_ACTIONS -> "Quick menu"
     GestureAction.NONE -> "Nothing"
 }

@@ -14,11 +14,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -28,7 +30,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,12 +48,18 @@ import dev.indla.island.ui.island.AppIconImage
 import dev.indla.island.ui.settings.AppEntry
 import dev.indla.island.ui.settings.components.GlassToggleRow
 import dev.indla.island.ui.settings.components.IslandPreview
+import dev.indla.island.ui.settings.components.RowDivider
+import dev.indla.island.ui.settings.components.SectionLabel
+import dev.indla.island.ui.settings.components.Segmented
+import dev.indla.island.ui.settings.components.Space
 import dev.indla.island.ui.settings.components.TabScaffold
 import dev.indla.island.ui.settings.components.glassSurface
 import dev.indla.island.ui.settings.theme.LocalGlass
 
 /** Accent swatches shared by the Apps and Look & feel tabs. */
 val AccentSwatches = listOf(0xFF8AB4F8, 0xFF7EE0B5, 0xFFFFC66D, 0xFFFF8A80, 0xFFD7AEFB, 0xFF80DEEA, 0xFFFFFFFF)
+
+private val IconSize = 36.dp
 
 @Composable
 fun AppsScreen(
@@ -64,118 +71,142 @@ fun AppsScreen(
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var expanded by rememberSaveable { mutableStateOf<String?>(null) }
-    val glass = LocalGlass.current
     val filtered = apps.orEmpty().filter { query.isBlank() || it.label.contains(query, ignoreCase = true) }
+    val (shown, hidden) = filtered.partition { ruleFor(it.packageName).show }
 
-    // Rows sit 2 dp apart so they read as one inset group.
-    TabScaffold(title = "Apps", pinned = { IslandPreview(appearance, reduceTransparency) }, itemSpacing = 2.dp) {
-        item {
-            Row(
-                Modifier
-                    .padding(bottom = 12.dp)
-                    .fillMaxWidth()
-                    .glassSurface(CircleShape)
-                    .padding(horizontal = 18.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Rounded.Search, null, tint = glass.contentSecondary)
-                Spacer(Modifier.width(10.dp))
-                Box(Modifier.weight(1f)) {
-                    if (query.isEmpty()) Text("Search apps", color = glass.contentSecondary, fontSize = 16.sp)
-                    BasicTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        singleLine = true,
-                        textStyle = TextStyle(color = glass.content, fontSize = 16.sp),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
+    // Rows sit 1 dp apart so each section reads as one inset group; sections add their own space.
+    TabScaffold(title = "Apps", pinned = { IslandPreview(appearance, reduceTransparency) }, itemSpacing = 1.dp) {
+        item(key = "search") {
+            SearchField(query, { query = it }, Modifier.padding(bottom = Space.s))
         }
-
         if (apps == null) {
-            item {
-                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            item(key = "loading") {
+                Box(Modifier.fillMaxWidth().padding(Space.xl), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
         }
-
-        itemsIndexed(filtered, key = { _, app -> app.packageName }) { index, app ->
-            val rule = ruleFor(app.packageName)
-            val shape = groupShape(index, filtered.size)
-            Column(Modifier.fillMaxWidth().glassSurface(shape)) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable { expanded = if (expanded == app.packageName) null else app.packageName }
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    AppIconImage(app.packageName, 38.dp)
-                    Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(app.label, color = glass.content, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                        Text(
-                            buildString {
-                                append(if (rule.show) priorityLabel(rule.priority) else "Hidden")
-                                if (app.isMessaging) append(" · Messaging")
-                            },
-                            color = glass.contentSecondary,
-                            fontSize = 13.sp,
-                        )
-                    }
-                    Switch(checked = rule.show, onCheckedChange = { onSave(rule.copy(show = it)) })
-                }
-                AnimatedVisibility(expanded == app.packageName) {
-                    RuleEditor(rule, onSave)
-                }
+        section("On the island", shown, expanded, { expanded = it }, ruleFor, onSave)
+        section("Other apps", hidden, expanded, { expanded = it }, ruleFor, onSave)
+        if (apps != null && filtered.isEmpty()) {
+            item(key = "empty") {
+                Text(
+                    "No apps match “$query”",
+                    color = LocalGlass.current.contentSecondary,
+                    modifier = Modifier.padding(Space.l),
+                )
             }
         }
     }
 }
 
+private fun LazyListScope.section(
+    title: String,
+    apps: List<AppEntry>,
+    expanded: String?,
+    onExpand: (String?) -> Unit,
+    ruleFor: (String) -> AppRule,
+    onSave: (AppRule) -> Unit,
+) {
+    if (apps.isEmpty()) return
+    item(key = "label:$title") {
+        SectionLabel("$title · ${apps.size}", Modifier.padding(top = Space.m, bottom = Space.xs))
+    }
+    itemsIndexed(apps, key = { _, app -> app.packageName }) { index, app ->
+        val rule = ruleFor(app.packageName)
+        val open = expanded == app.packageName
+        Column(Modifier.animateItem().fillMaxWidth().glassSurface(groupShape(index, apps.size))) {
+            AppRow(app, rule, onToggle = { onSave(rule.copy(show = it)) }, onClick = { onExpand(if (open) null else app.packageName) })
+            AnimatedVisibility(open) { RuleEditor(rule, onSave) }
+        }
+    }
+}
+
 @Composable
-private fun RuleEditor(rule: AppRule, onSave: (AppRule) -> Unit) {
+private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modifier = Modifier) {
     val glass = LocalGlass.current
-    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-        Text("Priority", color = glass.contentSecondary, fontSize = 13.sp, modifier = Modifier.padding(start = 20.dp, top = 4.dp))
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Priority.entries.forEach { p ->
-                val selected = rule.priority == p
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(40.dp)
-                        .clip(CircleShape)
-                        .then(
-                            if (selected) Modifier.background(MaterialTheme.colorScheme.primary)
-                            else Modifier.glassSurface(CircleShape, strong = true),
-                        )
-                        .clickable { onSave(rule.copy(priority = p)) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        priorityLabel(p),
-                        color = if (selected) MaterialTheme.colorScheme.onPrimary else glass.content,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp,
-                    )
-                }
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .glassSurface(CircleShape)
+            .padding(horizontal = Space.l),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.Search, null, tint = glass.contentSecondary, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(Space.s))
+        Box(Modifier.weight(1f)) {
+            if (query.isEmpty()) Text("Search apps", color = glass.contentSecondary, fontSize = 15.sp)
+            BasicTextField(
+                value = query,
+                onValueChange = onQuery,
+                singleLine = true,
+                textStyle = TextStyle(color = glass.content, fontSize = 15.sp),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (query.isNotEmpty()) {
+            Icon(
+                Icons.Rounded.Close,
+                "Clear search",
+                tint = glass.contentSecondary,
+                modifier = Modifier.size(20.dp).clip(CircleShape).clickable { onQuery("") },
+            )
+        }
+    }
+}
+
+@Composable
+private fun AppRow(app: AppEntry, rule: AppRule, onToggle: (Boolean) -> Unit, onClick: () -> Unit) {
+    val glass = LocalGlass.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = Space.rowPadding, vertical = Space.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AppIconImage(app.packageName, IconSize)
+        Spacer(Modifier.width(Space.m))
+        Column(Modifier.weight(1f)) {
+            Text(app.label, color = glass.content, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            val details = buildList {
+                if (rule.show) add(priorityLabel(rule.priority))
+                if (rule.autoExpand) add("Expands")
+                if (rule.hideContentOnLock) add("Private on lock")
+                if (app.isMessaging) add("Chat")
+            }
+            if (details.isNotEmpty()) {
+                Text(details.joinToString(" · "), color = glass.contentSecondary, fontSize = 13.sp, maxLines = 1)
             }
         }
+        Switch(checked = rule.show, onCheckedChange = onToggle)
+    }
+}
+
+@Composable
+private fun RuleEditor(rule: AppRule, onSave: (AppRule) -> Unit) {
+    val inset = Space.rowPadding + IconSize + Space.m
+    Column(Modifier.fillMaxWidth().padding(bottom = Space.s)) {
+        RowDivider(start = inset)
+        Segmented(
+            options = Priority.entries,
+            selected = rule.priority,
+            label = ::priorityLabel,
+            onSelect = { onSave(rule.copy(priority = it)) },
+            modifier = Modifier.padding(start = inset, end = Space.rowPadding, top = Space.m, bottom = Space.xs),
+        )
         GlassToggleRow("Expand automatically", rule.autoExpand, { onSave(rule.copy(autoExpand = it)) })
         GlassToggleRow(
-            "Hide content on lockscreen",
+            "Private on lockscreen",
             rule.hideContentOnLock,
             { onSave(rule.copy(hideContentOnLock = it)) },
-            subtitle = "Shows the app icon only until you unlock",
+            subtitle = "Only the app icon until you unlock",
         )
-        Text("Colour", color = glass.contentSecondary, fontSize = 13.sp, modifier = Modifier.padding(start = 20.dp, top = 4.dp))
         Swatches(
             selected = rule.accentArgb,
             includeAuto = true,
             onPick = { onSave(rule.copy(accentArgb = it)) },
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = Space.rowPadding, vertical = Space.s),
         )
     }
 }
@@ -183,22 +214,22 @@ private fun RuleEditor(rule: AppRule, onSave: (AppRule) -> Unit) {
 @Composable
 fun Swatches(selected: Long?, includeAuto: Boolean, onPick: (Long?) -> Unit, modifier: Modifier = Modifier) {
     val glass = LocalGlass.current
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         if (includeAuto) {
             Box(
                 Modifier
-                    .size(34.dp)
+                    .size(32.dp)
                     .clip(CircleShape)
                     .glassSurface(CircleShape, strong = true)
                     .then(if (selected == null) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier)
                     .clickable { onPick(null) },
                 contentAlignment = Alignment.Center,
-            ) { Text("A", color = glass.content, fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+            ) { Text("A", color = glass.content, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
         }
         AccentSwatches.forEach { argb ->
             Box(
                 Modifier
-                    .size(34.dp)
+                    .size(32.dp)
                     .clip(CircleShape)
                     .background(Color(argb))
                     .then(if (selected == argb) Modifier.border(3.dp, glass.content, CircleShape) else Modifier)
@@ -214,10 +245,10 @@ private fun priorityLabel(p: Priority) = when (p) {
     Priority.SILENT -> "Silent"
 }
 
-/** iOS-Settings-style inset group: only the first and last rows are rounded. */
+/** iOS-Settings-style inset group: only the first and last rows are fully rounded. */
 private fun groupShape(index: Int, count: Int): RoundedCornerShape {
-    val r = 28.dp
-    val small = 6.dp
+    val r = 24.dp
+    val small = 4.dp
     return RoundedCornerShape(
         topStart = if (index == 0) r else small,
         topEnd = if (index == 0) r else small,

@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,15 +33,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
@@ -50,21 +57,27 @@ import dev.chrisbanes.haze.blur.HazeColorEffect
 import dev.chrisbanes.haze.blur.hazeBlur
 import dev.indla.island.ui.settings.theme.LocalGlass
 
+private val HeaderMax = 96.dp
+private val HeaderMin = 52.dp
+
+/** Height the floating tab bar occupies above the navigation bar, including its margin. */
+private val TabBarClearance = 52.dp + Space.m + Space.l
+
 /**
- * One UI-style screen: a large title in the top third that collapses on scroll, a live preview
- * pinned under it, and the scrolling content below, with controls in thumb reach.
+ * One UI-style screen: a large title that collapses on scroll (with an optional control on the
+ * right, in thumb reach once collapsed), the live preview pinned under it, and the content.
  */
 @Composable
 fun TabScaffold(
     title: String,
     pinned: @Composable () -> Unit,
-    itemSpacing: androidx.compose.ui.unit.Dp = 14.dp,
+    headerAction: (@Composable () -> Unit)? = null,
+    itemSpacing: Dp = Space.cardGap,
     content: LazyListScope.() -> Unit,
 ) {
     val density = LocalDensity.current
-    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-    val maxPx = with(density) { (screenHeight * 0.2f).coerceIn(120.dp, 220.dp).toPx() }
-    val minPx = with(density) { 56.dp.toPx() }
+    val maxPx = with(density) { HeaderMax.toPx() }
+    val minPx = with(density) { HeaderMin.toPx() }
     var headerPx by remember { mutableFloatStateOf(maxPx) }
     val connection = remember(maxPx, minPx) {
         object : NestedScrollConnection {
@@ -86,30 +99,49 @@ fun TabScaffold(
         }
     }
     val progress = ((headerPx - minPx) / (maxPx - minPx)).coerceIn(0f, 1f)
+    val navBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Column(Modifier.fillMaxSize().nestedScroll(connection)) {
         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-        Box(
-            Modifier.fillMaxWidth().height(with(density) { headerPx.toDp() }).padding(horizontal = 24.dp),
-            contentAlignment = Alignment.BottomStart,
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(with(density) { headerPx.toDp() })
+                .padding(start = Space.xl, end = Space.l, bottom = lerp(Space.s, Space.m, progress)),
+            verticalAlignment = Alignment.Bottom,
         ) {
             Text(
                 title,
                 color = LocalGlass.current.content,
-                fontSize = lerp(22.sp, 36.sp, progress),
+                fontSize = lerp(22.sp, 34.sp, progress),
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = lerp(10.dp, 18.dp, progress)),
+                modifier = Modifier.weight(1f),
             )
+            headerAction?.invoke()
         }
-        Box(Modifier.padding(horizontal = 16.dp)) { pinned() }
+        Box(Modifier.padding(horizontal = Space.gutter)) { pinned() }
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
+            modifier = Modifier.fillMaxSize().fadeTopEdge(Space.cardGap),
+            contentPadding = PaddingValues(
+                start = Space.gutter,
+                end = Space.gutter,
+                top = Space.cardGap,
+                bottom = TabBarClearance + navBar,
+            ),
             verticalArrangement = Arrangement.spacedBy(itemSpacing),
             content = content,
         )
     }
 }
+
+/** Cards scrolling under the pinned preview dissolve instead of meeting a hard edge. */
+private fun Modifier.fadeTopEdge(height: Dp): Modifier = this
+    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        val fade = height.toPx() / size.height
+        drawRect(Brush.verticalGradient(0f to Color.Transparent, fade to Color.Black), blendMode = BlendMode.DstIn)
+    }
 
 data class TabItem(val label: String, val icon: ImageVector)
 
@@ -132,12 +164,12 @@ fun GlassTabBar(
     Row(
         modifier
             .navigationBarsPadding()
-            .padding(bottom = 12.dp)
+            .padding(bottom = Space.m)
             .clip(CircleShape)
             .then(if (glass.solid) Modifier else Modifier.hazeBlur(HazeInput.Sources(hazeState), style))
             .glassSurface(CircleShape, strong = glass.solid)
             .padding(6.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(Space.xs),
     ) {
         tabs.forEachIndexed { index, tab ->
             val interaction = remember { MutableInteractionSource() }
@@ -145,15 +177,16 @@ fun GlassTabBar(
             Row(
                 Modifier
                     .squishable(interaction)
+                    .height(40.dp)
                     .clip(CircleShape)
                     .then(if (active) Modifier.glassSurface(CircleShape, strong = true) else Modifier)
                     .clickable(interaction, null) { onSelect(index) }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .padding(horizontal = Space.l),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(tab.icon, null, tint = if (active) scheme.primary else glass.contentSecondary, modifier = Modifier.size(20.dp))
+                Icon(tab.icon, tab.label, tint = if (active) scheme.primary else glass.contentSecondary, modifier = Modifier.size(20.dp))
                 if (active) {
-                    Spacer(Modifier.size(8.dp))
+                    Spacer(Modifier.size(Space.s))
                     Text(tab.label, color = glass.content, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 }
             }
