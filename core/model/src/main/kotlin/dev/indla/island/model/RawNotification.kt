@@ -41,6 +41,8 @@ data class RawNotification(
     val callCanHangUp: Boolean = false,
     /** Chronometer base (`Notification.when`) when the notification shows a running timer. */
     val chronometerBase: Long? = null,
+    /** EXTRA_CHRONOMETER_COUNT_DOWN: the chronometer counts down to [chronometerBase]. */
+    val chronometerCountDown: Boolean = false,
     /** Key into the icon store for `largeIcon`, if the listener cached one. */
     val largeIconKey: String? = null,
     /** A vivid colour picked from the app icon, for "Colour from app icon". */

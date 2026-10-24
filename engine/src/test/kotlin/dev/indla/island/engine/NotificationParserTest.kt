@@ -165,4 +165,22 @@ class NotificationParserTest {
         assertEquals(NotificationParser.MediaKind.STICKER, kind("Sticker"))
         assertNull(kind("I sent a reel yesterday, did you see it?"))
     }
+
+    @Test
+    fun clockTimer_isLiveCountdown() {
+        val item = show(Fixtures.clockTimer())
+        assertEquals(ItemKind.TIMER, item.kind)
+        val timer = item.live as LiveContent.Timer
+        assertEquals("Timer", timer.label)
+        assertEquals("14:04", timer.staticTime)
+        assertTrue(timer.countDown)
+        assertEquals(listOf("Pause", "Add 1 minute"), item.actions.map { it.title })
+    }
+
+    @Test
+    fun pausedTimer_keepsTheAppsText() {
+        val timer = show(Fixtures.clockTimer(running = false)).live as LiveContent.Timer
+        assertNull(timer.baseMs)
+        assertEquals("14:04", timer.staticTime)
+    }
 }

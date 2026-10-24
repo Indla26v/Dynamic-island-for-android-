@@ -53,6 +53,7 @@ class SettingsRepository @Inject constructor(
         val onboardingDone = booleanPreferencesKey("onboarding_done")
         val disclosure = booleanPreferencesKey("a11y_disclosure_accepted")
         val autoColour = booleanPreferencesKey("auto_colour")
+        val glassCard = booleanPreferencesKey("glass_card")
         fun live(name: String) = booleanPreferencesKey("live_$name")
         fun gesture(slot: String) = stringPreferencesKey("gesture_$slot")
     }
@@ -75,6 +76,7 @@ class SettingsRepository @Inject constructor(
                 showRestPill = this[Keys.restPill] ?: a.showRestPill,
                 glassIntensity = this[Keys.glass] ?: a.glassIntensity,
                 autoColour = this[Keys.autoColour] ?: a.autoColour,
+                glassCard = this[Keys.glassCard] ?: a.glassCard,
             ),
             whenToShow = WhenToShow(
                 hideInForegroundApp = this[Keys.hideForeground] ?: w.hideInForegroundApp,
@@ -100,6 +102,7 @@ class SettingsRepository @Inject constructor(
                 media = this[Keys.live("media")] ?: d.live.media,
                 calls = this[Keys.live("calls")] ?: d.live.calls,
                 progress = this[Keys.live("progress")] ?: d.live.progress,
+                timers = this[Keys.live("timers")] ?: d.live.timers,
                 charging = this[Keys.live("charging")] ?: d.live.charging,
                 batteryLow = this[Keys.live("battery_low")] ?: d.live.batteryLow,
                 ringer = this[Keys.live("ringer")] ?: d.live.ringer,
@@ -120,9 +123,11 @@ class SettingsRepository @Inject constructor(
         this[Keys.restPill] = s.appearance.showRestPill
         this[Keys.glass] = s.appearance.glassIntensity
         this[Keys.autoColour] = s.appearance.autoColour
+        this[Keys.glassCard] = s.appearance.glassCard
         this[Keys.live("media")] = s.live.media
         this[Keys.live("calls")] = s.live.calls
         this[Keys.live("progress")] = s.live.progress
+        this[Keys.live("timers")] = s.live.timers
         this[Keys.live("charging")] = s.live.charging
         this[Keys.live("battery_low")] = s.live.batteryLow
         this[Keys.live("ringer")] = s.live.ringer

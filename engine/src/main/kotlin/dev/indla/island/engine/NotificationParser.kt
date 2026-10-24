@@ -42,10 +42,11 @@ class NotificationParser(
 
     fun parse(raw: RawNotification, rule: AppRule): ParseResult {
         if (isMedia(raw)) return ParseResult.Skip(SkipReason.MEDIA_SESSION)
-        if (raw.category in SYSTEM_CATEGORIES) return ParseResult.Skip(SkipReason.SYSTEM_CATEGORY)
 
         val item = when {
             isCall(raw) -> callItem(raw)
+            isTimer(raw) -> timerItem(raw)
+            raw.category in SYSTEM_CATEGORIES -> return ParseResult.Skip(SkipReason.SYSTEM_CATEGORY)
             isProgress(raw) -> progressItem(raw)
             raw.ongoing -> return ParseResult.Skip(SkipReason.ONGOING)
             isRedacted(raw) -> hiddenItem(raw)
@@ -66,6 +67,35 @@ class NotificationParser(
 
     fun isCall(raw: RawNotification): Boolean =
         raw.template?.endsWith("CallStyle") == true || raw.callType != 0 || raw.category == "call"
+
+    /**
+     * Clock timers and stopwatches: a running chronometer that isn't a call, the stopwatch
+     * category, an ongoing alarm-category notification, or anything ongoing from a clock app.
+     */
+    fun isTimer(raw: RawNotification): Boolean =
+        raw.category == "stopwatch" ||
+            (raw.chronometerBase != null && raw.ongoing) ||
+            (raw.ongoing && (raw.category == "alarm" || raw.packageName in CLOCK_PACKAGES))
+
+    private fun timerItem(raw: RawNotification): IslandItem {
+        val title = raw.title?.trim().orEmpty()
+        val text = raw.text?.trim().orEmpty()
+        // Clock puts the time in the title and "Timer" below it; other apps do the reverse.
+        val (time, label) = when {
+            TIME.matches(title) -> title to text.ifEmpty { "Timer" }
+            TIME.matches(text) -> text to title.ifEmpty { "Timer" }
+            else -> "" to title.ifEmpty { text.ifEmpty { "Timer" } }
+        }
+        val countDown = raw.chronometerCountDown ||
+            (raw.category != "stopwatch" && !label.contains("stopwatch", ignoreCase = true))
+        return baseItem(raw).copy(
+            kind = ItemKind.TIMER,
+            title = label,
+            glance = time,
+            lines = emptyList(),
+            live = LiveContent.Timer(label, raw.chronometerBase, countDown, time),
+        )
+    }
 
     /** Ongoing work with progress, or the categories delivery, ride and navigation apps use. */
     fun isProgress(raw: RawNotification): Boolean =
@@ -323,6 +353,22 @@ class NotificationParser(
 
         /** System plumbing that never belongs on the island. */
         val SYSTEM_CATEGORIES = setOf("service", "sys", "alarm", "stopwatch")
+
+        /** Clock apps whose ongoing notifications are timers or stopwatches. */
+        val CLOCK_PACKAGES = setOf(
+            "com.google.android.deskclock",
+            "com.android.deskclock",
+            "com.android.BBKClock",
+            "com.sec.android.app.clockpackage",
+            "com.oneplus.deskclock",
+            "com.coloros.alarmclock",
+            "com.oplus.alarmclock",
+            "com.android.alarmclock",
+            "com.huawei.deskclock",
+            "com.miui.clock",
+        )
+
+        private val TIME = Regex("""-?\d{1,2}(:\d{2}){1,2}""")
 
         /** Ongoing notifications in these categories are deliveries, rides, navigation. */
         val PROGRESS_CATEGORIES = setOf("progress", "navigation", "status", "location_sharing")

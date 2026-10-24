@@ -122,7 +122,8 @@ fun IslandSurface(
     val intensity = appearance.glassIntensity.coerceIn(0f, 1f)
     val tint by animateFloatAsState(
         when {
-            reduceTransparency -> 1f
+            // Solid black by default: the expanded card matches the pill and the camera.
+            !appearance.glassCard || reduceTransparency -> 1f
             backdropBlur -> 0.5f + 0.3f * intensity
             else -> 0.78f + 0.17f * intensity
         },
@@ -140,7 +141,7 @@ fun IslandSurface(
             val glass = ((r.height - layout.restHeight) / 56f).coerceIn(0f, 1f)
             if (shapeAlpha <= 0.01f) return@Canvas
             drawIsland(r, attached, Color.Black.copy(alpha = (1f - (1f - tint) * glass) * shapeAlpha))
-            if (glass > 0.01f) {
+            if (glass > 0.01f && appearance.glassCard) {
                 val px = r.toPx(this)
                 drawIslandOutline(r, attached, edge.brush(Size(px.width, px.height), 0.55f * glass), px.topLeft)
             }
@@ -196,13 +197,15 @@ private fun Bubble(item: IslandItem, rect: IslandRect, scale: Float, accent: Col
     }
 }
 
-private fun contentKey(state: IslandUiState): Any = listOf(
-    state.mode,
-    state.current?.key,
-    state.current?.contentHash,
-    state.replyOpen,
-    state.quickActionsOpen,
-)
+/**
+ * What makes the content crossfade. A live activity only counts its stable part (a new track, a
+ * call answered), so a download tick or a timer second updates in place instead of reloading.
+ */
+private fun contentKey(state: IslandUiState): Any {
+    val item = state.current
+    val content: Any? = if (item?.live != null) listOf(item.kind, item.title, item.live?.stableKey) else item?.contentHash
+    return listOf(state.mode, item?.key, content, state.replyOpen, state.quickActionsOpen)
+}
 
 private data class PxRect(val topLeft: Offset, val width: Float, val height: Float, val radius: Float)
 

@@ -98,6 +98,7 @@ class IslandAccessibilityService : AccessibilityService() {
     private var imePackages: Set<String> = emptySet()
     private var lastMode = IslandMode.REST
     private var lastContent: Any? = null
+    private var shadeFromEvents = false
     private var blurJob: Job? = null
     private var blur: BlurWindow? = null
     private var systemEvents: SystemEventMonitor? = null
@@ -139,13 +140,19 @@ class IslandAccessibilityService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         val cls = event.className?.toString().orEmpty()
         when {
-            // Fallback for when the window list isn't available; readWindows() overrides it.
-            pkg == SYSTEM_UI -> if (looksLikeShade(event)) updateEnvironment { it.copy(shadeOpen = true) }
+            // Second opinion for skins whose shade isn't a full-height SystemUI window.
+            pkg == SYSTEM_UI -> if (looksLikeShade(event)) {
+                shadeFromEvents = true
+                updateEnvironment { it.copy(shadeOpen = true) }
+            }
             pkg in imePackages || cls.startsWith("android.inputmethodservice") -> Unit
             // Island's own blur dialog isn't "the app in front"; its settings screen is.
             pkg == packageName && cls.startsWith("android.") -> Unit
             cls in TRANSIENT_CLASSES -> Unit
-            else -> updateEnvironment { it.copy(foregroundPackage = pkg, shadeOpen = false) }
+            else -> {
+                shadeFromEvents = false
+                updateEnvironment { it.copy(foregroundPackage = pkg, shadeOpen = false) }
+            }
         }
     }
 
@@ -171,7 +178,8 @@ class IslandAccessibilityService : AccessibilityService() {
             if (bounds.height() >= screenH / 2 && bounds.width() >= screenW * 0.8f) shade = true
         }
         val fullscreen = !statusBar && !shade && !engine.environment.locked
-        updateEnvironment { it.copy(fullscreen = fullscreen, shadeOpen = shade) }
+        // Either signal hides the island: window shapes differ between OEM skins.
+        updateEnvironment { it.copy(fullscreen = fullscreen, shadeOpen = shade || shadeFromEvents) }
         if (debugLog) Log.d(TAG, "windows: statusBar=$statusBar shade=$shade -> ${engine.environment}")
     }
 
@@ -319,7 +327,9 @@ class IslandAccessibilityService : AccessibilityService() {
     private fun updateBlur(state: IslandUiState, layout: IslandLayout, m: ScreenMetrics) {
         blurJob?.cancel()
         val window = blur ?: return
-        if (state.mode != IslandMode.EXPANDED || !state.visible || reduceTransparency.value || !window.supported) {
+        if (state.mode != IslandMode.EXPANDED || !state.visible || !state.appearance.glassCard ||
+            reduceTransparency.value || !window.supported
+        ) {
             window.hide()
             blurShown.value = false
             return

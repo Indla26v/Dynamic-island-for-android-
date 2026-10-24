@@ -24,6 +24,8 @@ data class IslandAppearance(
     val glassIntensity: Float = 0.6f,
     /** Tint each app's items with a colour picked from its icon (a per-app colour still wins). */
     val autoColour: Boolean = true,
+    /** Expanded card as frosted glass with backdrop blur; off = solid black, like the pill. */
+    val glassCard: Boolean = false,
 )
 
 /** Which live activities and system events may use the island. */
@@ -31,6 +33,7 @@ data class LiveSettings(
     val media: Boolean = true,
     val calls: Boolean = true,
     val progress: Boolean = true,
+    val timers: Boolean = true,
     val charging: Boolean = true,
     val batteryLow: Boolean = true,
     val ringer: Boolean = true,
@@ -91,9 +94,15 @@ data class GestureMap(
     }
 }
 
+/**
+ * [show] is whether the app's notifications pop. Live activities (music, calls, progress,
+ * timers) follow the global Live activities toggles instead, unless the app is [muted]
+ * (the island's long-press "Mute"), which silences everything from it.
+ */
 data class AppRule(
     val packageName: String,
     val show: Boolean,
+    val muted: Boolean = false,
     val priority: Priority = Priority.NORMAL,
     val autoExpand: Boolean = false,
     val hideContentOnLock: Boolean = false,

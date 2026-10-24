@@ -24,5 +24,6 @@ class AppRuleRepository @Inject constructor(
 
     suspend fun saveAll(rules: List<AppRule>) = dao.upsertAll(rules.map(AppRuleEntity::from))
 
-    suspend fun mute(packageName: String) = save(rule(packageName).copy(show = false))
+    /** The island's long-press Mute: nothing from this app, live activities included. */
+    suspend fun mute(packageName: String) = save(rule(packageName).copy(show = false, muted = true))
 }

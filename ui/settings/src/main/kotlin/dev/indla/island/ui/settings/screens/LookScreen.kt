@@ -108,6 +108,12 @@ fun LookScreen(
                 GlassSliderRow("Size", a.sizeScale, 0.8f..1.3f, { "${(it * 100).roundToInt()}%" }, { v ->
                     onAppearance { it.copy(sizeScale = v) }
                 })
+                GlassToggleRow(
+                    "Glass card",
+                    a.glassCard,
+                    { v -> onAppearance { it.copy(glassCard = v) } },
+                    subtitle = "Frosted, blurred expanded card instead of solid black",
+                )
                 GlassSliderRow("Glass", a.glassIntensity, 0f..1f, { if (it < 0.5f) "Clear" else "Tinted" }, { v ->
                     onAppearance { it.copy(glassIntensity = v) }
                 })

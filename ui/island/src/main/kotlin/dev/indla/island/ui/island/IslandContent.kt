@@ -1,5 +1,7 @@
 package dev.indla.island.ui.island
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,6 +27,9 @@ import androidx.compose.material.icons.rounded.BatteryAlert
 import androidx.compose.material.icons.rounded.BatteryStd
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Call
+import androidx.compose.material.icons.rounded.ChatBubble
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.CallEnd
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FastForward
@@ -122,11 +127,12 @@ private fun RowScope.CompactLeading(item: IslandItem, size: Dp, accent: Color) {
             Spacer(Modifier.width(4.dp))
             Text(formatDuration(now - live.startedAtMs), color = CallGreen, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, style = Tabular, maxLines = 1)
         } else {
-            Avatar(item.avatarKey, item.packageName, size)
+            ItemAvatar(item, item.avatarKey, size)
         }
         is LiveContent.System -> Icon(systemIcon(live.event), null, tint = systemColor(live.event, accent), modifier = Modifier.size(size * 0.85f))
-        is LiveContent.Progress -> AppIconImage(item.packageName, size)
-        null -> if (item.isHidden) AppIconImage(item.packageName, size) else Avatar(item.avatarKey, item.packageName, size)
+        is LiveContent.Progress -> ItemIcon(item, size)
+        is LiveContent.Timer -> Icon(Icons.Rounded.Timer, null, tint = TimerOrange, modifier = Modifier.size(size * 0.85f))
+        null -> ItemAvatar(item, item.avatarKey, size)
     }
 }
 
@@ -144,6 +150,10 @@ private fun CompactTrailing(item: IslandItem, accent: Color, minimal: Boolean) {
                 Spacer(Modifier.width(6.dp))
             }
             ProgressRing(live.fraction, accent, Modifier.size(18.dp))
+        }
+        is LiveContent.Timer -> {
+            val now by rememberNow()
+            GlanceText(live.display(now), TimerOrange)
         }
         is LiveContent.System -> {
             val color = systemColor(live.event, accent)
@@ -180,14 +190,15 @@ internal fun BubbleContent(item: IslandItem, size: Dp, accent: Color) {
         }
         is LiveContent.Progress -> Box(contentAlignment = Alignment.Center) {
             ProgressRing(live.fraction, itemAccent, Modifier.size(inner), stroke = 3.dp)
-            AppIconImage(item.packageName, inner * 0.55f)
+            ItemIcon(item, inner * 0.55f)
         }
+        is LiveContent.Timer -> Icon(Icons.Rounded.Timer, null, tint = TimerOrange, modifier = Modifier.size(inner * 0.7f))
         is LiveContent.System -> Box(contentAlignment = Alignment.Center) {
             val color = systemColor(live.event, itemAccent)
             live.level?.let { ProgressRing(it / 100f, color, Modifier.size(inner), stroke = 3.dp) }
             Icon(systemIcon(live.event), null, tint = color, modifier = Modifier.size(inner * 0.55f))
         }
-        null -> Avatar(item.avatarKey, item.packageName, inner)
+        null -> ItemAvatar(item, item.avatarKey, inner)
     }
 }
 
@@ -212,6 +223,7 @@ private fun ExpandedContent(
             item.live is LiveContent.Media -> MediaBody(item, item.live as LiveContent.Media, registry)
             item.live is LiveContent.Progress -> ProgressBody(item, item.live as LiveContent.Progress, accent, registry)
             item.live is LiveContent.System -> SystemBody(item.live as LiveContent.System, accent)
+            item.live is LiveContent.Timer -> TimerBody(item, item.live as LiveContent.Timer, registry)
             else -> NotificationBody(item, state.replyOpen, registry, drawReplyHint)
         }
     }
@@ -225,7 +237,7 @@ private fun Band(item: IslandItem, layout: IslandLayout, rect: IslandRect, pad: 
     val rightWidth = (rect.width - camera - layout.cameraGap / 2 - pad).coerceAtLeast(0f)
     Row(Modifier.fillMaxWidth().height(layout.bandHeight.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.width(leftWidth.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (item.kind != ItemKind.SYSTEM) {
+            if (item.kind != ItemKind.SYSTEM && !isIslandPackage(item.packageName)) {
                 AppIconImage(item.packageName, 16.dp)
                 Spacer(Modifier.width(6.dp))
                 Text(item.appLabel, color = Secondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -243,6 +255,7 @@ private fun Band(item: IslandItem, layout: IslandLayout, rect: IslandRect, pad: 
                     Text("${(it * 100).toInt()}%", color = accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, style = Tabular)
                 }
                 is LiveContent.System -> Unit
+                is LiveContent.Timer -> Unit
                 null -> {
                     val now by rememberNow(30_000)
                     Text(relativeTime(item.postTime, now), color = Secondary, fontSize = 12.sp)
@@ -327,7 +340,7 @@ private fun NotificationBody(item: IslandItem, replyOpen: Boolean, registry: Hit
 @Composable
 private fun CallBody(item: IslandItem, call: LiveContent.Call, registry: HitRegistry?) {
     Row(Modifier.fillMaxWidth().height(IslandLayout.CALL_ROW.dp), verticalAlignment = Alignment.CenterVertically) {
-        Avatar(item.avatarKey, item.packageName, 46.dp)
+        ItemAvatar(item, item.avatarKey, 46.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             val sub = when (call.state) {
@@ -446,8 +459,9 @@ private fun ProgressBody(item: IslandItem, progress: LiveContent.Progress, accen
     }
     Spacer(Modifier.height(12.dp))
     if (progress.fraction != null) {
+        val fraction by animateFloatAsState(progress.fraction!!, tween(500), label = "bar")
         Box(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(accent.copy(alpha = 0.25f))) {
-            Box(Modifier.fillMaxWidth(progress.fraction!!).height(6.dp).clip(CircleShape).background(accent))
+            Box(Modifier.fillMaxWidth(fraction).height(6.dp).clip(CircleShape).background(accent))
         }
     } else {
         androidx.compose.material3.LinearProgressIndicator(
@@ -500,15 +514,73 @@ private fun QuickActions(item: IslandItem, registry: HitRegistry?) {
 
 // ---- Pieces ------------------------------------------------------------------------------------
 
+/** Clock timer or stopwatch: big orange time, label, and the app's own buttons. */
+@Composable
+private fun TimerBody(item: IslandItem, timer: LiveContent.Timer, registry: HitRegistry?) {
+    val now by rememberNow()
+    Row(Modifier.fillMaxWidth().height(IslandLayout.CALL_ROW.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(46.dp).clip(CircleShape).background(TimerOrange.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Timer, null, tint = TimerOrange, modifier = Modifier.size(26.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(timer.label, color = Secondary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(timer.display(now), color = TimerOrange, fontSize = 30.sp, fontWeight = FontWeight.SemiBold, style = Tabular, maxLines = 1)
+    }
+    if (item.actions.isNotEmpty()) {
+        Spacer(Modifier.height(IslandLayout.GAP.dp))
+        ButtonRow {
+            item.actions.forEach { action ->
+                PillButton(action.title, null, registry, HitRegistry.action(action.index), Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+/**
+ * The app's icon, except for Island's own demo items, which get a neutral glyph: the Island
+ * logo never appears on the island.
+ */
+@Composable
+private fun ItemIcon(item: IslandItem, size: Dp) {
+    if (!isIslandPackage(item.packageName)) {
+        AppIconImage(item.packageName, size)
+        return
+    }
+    val glyph = when (item.kind) {
+        ItemKind.CALL -> Icons.Rounded.Call
+        ItemKind.MEDIA -> Icons.Rounded.MusicNote
+        ItemKind.PROGRESS -> Icons.Rounded.Download
+        ItemKind.TIMER -> Icons.Rounded.Timer
+        else -> Icons.Rounded.ChatBubble
+    }
+    Box(Modifier.size(size).clip(CircleShape).background(ButtonGrey), contentAlignment = Alignment.Center) {
+        Icon(glyph, null, tint = Color.White, modifier = Modifier.size(size * 0.55f))
+    }
+}
+
+/** A person's photo when there is one; a green phone for calls; otherwise [ItemIcon]. */
+@Composable
+private fun ItemAvatar(item: IslandItem, key: String?, size: Dp) {
+    val store = LocalIconStore.current
+    val bitmap = remember(key, store) { store?.get(key)?.asImageBitmap() }
+    when {
+        bitmap != null && !item.isHidden -> Image(bitmap, null, Modifier.size(size).clip(CircleShape), contentScale = ContentScale.Crop)
+        item.kind == ItemKind.CALL -> Box(Modifier.size(size).clip(CircleShape).background(CallGreen), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Call, null, tint = Color.White, modifier = Modifier.size(size * 0.58f))
+        }
+        else -> ItemIcon(item, size)
+    }
+}
+
 /** Sender avatar with the app's icon as a small badge, like a banner notification. */
 @Composable
 private fun AvatarWithBadge(item: IslandItem, size: Dp) {
     Box(Modifier.size(size)) {
         if (item.isHidden || item.avatarKey == null) {
-            AppIconImage(item.packageName, size)
+            ItemIcon(item, size)
         } else {
             Avatar(item.avatarKey, item.packageName, size)
-            AppIconImage(
+            if (!isIslandPackage(item.packageName)) AppIconImage(
                 item.packageName,
                 size * 0.42f,
                 Modifier.align(Alignment.BottomEnd).offset(3.dp, 3.dp).border(1.5.dp, Color.Black, CircleShape),

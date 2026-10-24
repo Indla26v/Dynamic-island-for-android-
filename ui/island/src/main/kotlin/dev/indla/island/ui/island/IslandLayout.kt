@@ -98,6 +98,7 @@ data class IslandLayout(
         val body = when {
             state.quickActionsOpen -> AVATAR + GAP + BUTTON_ROW
             item.kind == ItemKind.CALL -> CALL_ROW
+            item.kind == ItemKind.TIMER -> CALL_ROW + actionsHeight(item)
             item.kind == ItemKind.MEDIA -> MEDIA_ART + GAP + SCRUBBER + MEDIA_CONTROLS
             item.kind == ItemKind.SYSTEM -> SYSTEM_ROW
             item.kind == ItemKind.PROGRESS -> PROGRESS_BODY + actionsHeight(item)
@@ -199,7 +200,7 @@ data class IslandLayout(
             }
             top = (top + appearance.offsetYDp).coerceAtLeast(0f)
 
-            val side = (if (appearance.preset == StylePreset.MINIMAL) restHeight + 6f else 60f) * scale
+            val side = (if (appearance.preset == StylePreset.MINIMAL) restHeight + 6f else 50f) * scale
             return IslandLayout(
                 kind = kind,
                 screenWidth = screenWidth,

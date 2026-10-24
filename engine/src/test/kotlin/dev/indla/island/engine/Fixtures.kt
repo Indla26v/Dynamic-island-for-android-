@@ -219,6 +219,22 @@ object Fixtures {
         ),
     )
 
+    /** Google Clock: the time in the title, "Timer" below it, a countdown chronometer. */
+    fun clockTimer(running: Boolean = true) = RawNotification(
+        key = "0|com.google.android.deskclock|2147483646|null|10100",
+        packageName = "com.google.android.deskclock",
+        appLabel = "Clock",
+        postTime = 11_000,
+        category = "alarm",
+        ongoing = true,
+        onlyAlertOnce = true,
+        title = "14:04",
+        text = "Timer",
+        chronometerBase = if (running) 11_000L + 14 * 60_000 + 4_000 else null,
+        chronometerCountDown = running,
+        actions = listOf(RawAction(0, "Pause"), RawAction(1, "Add 1 minute")),
+    )
+
     fun silent(base: RawNotification = whatsAppDirect()) =
         base.copy(ranking = RawRanking(importance = Importance.LOW))
 

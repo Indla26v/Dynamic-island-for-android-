@@ -217,7 +217,7 @@ class IslandEngine(
             return
         }
         val explicit = rules[snapshot.packageName]
-        if (!settings.live.media || explicit?.show == false) {
+        if (!settings.live.media || (explicit?.muted == true && !snapshot.isSelfTest)) {
             parked.removeAll { it.item.key == key }
             removeKey(key)
             publish()
@@ -389,14 +389,14 @@ class IslandEngine(
     // ---- Internals ---------------------------------------------------------------------------
 
     private fun shows(item: IslandItem, explicit: AppRule?, selfTest: Boolean): Boolean {
-        val kindAllowed = when (item.kind) {
+        if (explicit?.muted == true && !selfTest) return false
+        return when (item.kind) {
+            // Live activities follow their own toggles, not the per-app notification switch.
             ItemKind.CALL -> settings.live.calls
             ItemKind.PROGRESS -> settings.live.progress
-            else -> true
+            ItemKind.TIMER -> settings.live.timers
+            else -> explicit?.show ?: (selfTest || item.packageName in DefaultApps.messaging)
         }
-        if (!kindAllowed) return false
-        // Calls and progress show by default; other apps only once the user picks them.
-        return explicit?.show ?: (selfTest || item.isLive || item.packageName in DefaultApps.messaging)
     }
 
     private fun withAccent(item: IslandItem, explicit: AppRule?, appAccent: Long?): IslandItem =
@@ -447,7 +447,7 @@ class IslandEngine(
 
     private fun isPersistent(item: IslandItem) = when (val live = item.live) {
         is LiveContent.Media -> live.playing
-        is LiveContent.Call, is LiveContent.Progress -> true
+        is LiveContent.Call, is LiveContent.Progress, is LiveContent.Timer -> true
         else -> false
     }
 

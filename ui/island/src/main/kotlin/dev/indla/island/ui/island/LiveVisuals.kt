@@ -4,6 +4,7 @@ import android.os.SystemClock
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -30,6 +31,17 @@ val CallGreen = Color(0xFF32D74B)
 val DeclineRed = Color(0xFFFF453A)
 val RecordingRed = Color(0xFFFF3B30)
 val ButtonGrey = Color(0xFF3A3A3C)
+val TimerOrange = Color(0xFFFF9F0A)
+
+/** Island's own package: its demo items never show the Island logo. */
+fun isIslandPackage(packageName: String) = packageName.startsWith("dev.indla.island")
+
+/** Time left on a countdown, or elapsed on a stopwatch; the app's own text while paused. */
+fun LiveContent.Timer.display(now: Long): String {
+    val base = baseMs ?: return staticTime
+    val ms = if (countDown) base - now else now - base
+    return if (ms < 0) "-" + formatDuration(-ms) else formatDuration(ms)
+}
 
 /**
  * A fixed "now" (wall clock, ms) for screenshot tests: timers stop ticking and looping
@@ -76,6 +88,8 @@ fun WaveBars(color: Color, playing: Boolean, modifier: Modifier = Modifier, bars
 @Composable
 fun ProgressRing(fraction: Float?, color: Color, modifier: Modifier = Modifier, stroke: Dp = Dp(2.5f)) {
     val frozen = LocalFrozenTime.current != null
+    // Progress glides between updates instead of jumping.
+    val smooth = fraction?.let { animateFloatAsState(it, tween(500), label = "ring").value }
     val spin = if (fraction == null) {
         val transition = rememberInfiniteTransition(label = "spin")
         transition.animateFloat(0f, 360f, infiniteRepeatable(tween(1100, easing = LinearEasing)), label = "angle")
@@ -88,7 +102,7 @@ fun ProgressRing(fraction: Float?, color: Color, modifier: Modifier = Modifier, 
         val topLeft = Offset(w / 2, w / 2)
         drawArc(color.copy(alpha = 0.25f), 0f, 360f, false, topLeft, arcSize, style = Stroke(w))
         if (fraction != null) {
-            drawArc(color, -90f, 360f * fraction.coerceIn(0f, 1f), false, topLeft, arcSize, style = Stroke(w, cap = StrokeCap.Round))
+            drawArc(color, -90f, 360f * (smooth ?: fraction).coerceIn(0f, 1f), false, topLeft, arcSize, style = Stroke(w, cap = StrokeCap.Round))
         } else {
             val angle = if (frozen) 0f else spin!!.value
             drawArc(color, angle, 90f, false, topLeft, arcSize, style = Stroke(w, cap = StrokeCap.Round))

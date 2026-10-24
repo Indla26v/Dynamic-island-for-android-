@@ -426,4 +426,32 @@ class IslandEngineTest {
         assertEquals("the user turned WhatsApp off", IslandMode.REST, engine.state.value.mode)
         backgroundScope.cancel()
     }
+
+    @Test
+    fun liveActivities_ignoreTheNotificationSwitch_butMuteBlocksThem() = test { h ->
+        // Onboarding used to write show=false for every unticked app; that must not hide music.
+        h.rules.value = mapOf(
+            "com.spotify.music" to AppRule("com.spotify.music", show = false),
+            "com.google.android.deskclock" to AppRule("com.google.android.deskclock", show = false),
+        )
+        runCurrent()
+        h.engine.onMedia(Fixtures.music(playing = true))
+        h.engine.onPosted(Fixtures.clockTimer())
+        assertEquals(setOf(ItemKind.MEDIA, ItemKind.TIMER), h.state.items.map { it.kind }.toSet())
+
+        h.rules.value = mapOf("com.spotify.music" to AppRule("com.spotify.music", show = false, muted = true))
+        runCurrent()
+        h.engine.onMedia(Fixtures.music(playing = true, track = "Sports"))
+        assertEquals(listOf(ItemKind.TIMER), h.state.items.map { it.kind })
+    }
+
+    @Test
+    fun timerTicks_updateInPlace() = test { h ->
+        h.engine.onPosted(Fixtures.clockTimer())
+        h.engine.onPosted(Fixtures.whatsAppDirect())
+        h.engine.onPosted(Fixtures.clockTimer().copy(title = "14:03"))
+        assertEquals("a tick never steals the island", ItemKind.MESSAGE, h.state.current?.kind)
+        advanceTimeBy(120_000); runCurrent()
+        assertEquals(ItemKind.TIMER, h.state.current?.kind)
+    }
 }

@@ -46,6 +46,7 @@ enum class ItemKind {
     CALL,
     PROGRESS,
     SYSTEM,
+    TIMER,
 }
 
 data class MessageLine(
@@ -119,6 +120,19 @@ sealed interface LiveContent {
         val status: String,
     ) : LiveContent {
         override val stableKey get() = status.isNotEmpty()
+    }
+
+    /** A Clock timer or stopwatch. */
+    data class Timer(
+        /** "Timer", "Stopwatch", or the timer's own label. */
+        val label: String,
+        /** Chronometer base: when a countdown ends, or when a stopwatch started. Null when paused. */
+        val baseMs: Long?,
+        val countDown: Boolean,
+        /** What the app shows while paused ("14:04"). */
+        val staticTime: String,
+    ) : LiveContent {
+        override val stableKey get() = listOf(label, baseMs == null)
     }
 
     data class System(

@@ -30,6 +30,8 @@ import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SelectAll
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -80,6 +82,7 @@ fun AppsScreen(
     onSave: (AppRule) -> Unit,
     live: LiveSettings,
     onLive: ((LiveSettings) -> LiveSettings) -> Unit,
+    onSetAll: (Boolean) -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var expanded by rememberSaveable { mutableStateOf<String?>(null) }
@@ -93,6 +96,20 @@ fun AppsScreen(
         }
         item(key = "search") {
             SearchField(query, { query = it }, Modifier.padding(bottom = Space.s))
+        }
+        if (!apps.isNullOrEmpty()) {
+            item(key = "all") {
+                val allOn = apps.all { ruleFor(it.packageName).show }
+                Box(Modifier.padding(bottom = Space.xs).fillMaxWidth().glassSurface()) {
+                    GlassToggleRow(
+                        "All apps",
+                        allOn,
+                        onSetAll,
+                        subtitle = if (allOn) "Every app can use the island" else "${apps.count { ruleFor(it.packageName).show }} of ${apps.size} apps on",
+                        icon = Icons.Rounded.SelectAll,
+                    )
+                }
+            }
         }
         if (apps == null) {
             item(key = "loading") {
@@ -129,7 +146,8 @@ private fun LazyListScope.section(
         val rule = ruleFor(app.packageName)
         val open = expanded == app.packageName
         Column(Modifier.animateItem().fillMaxWidth().glassSurface(groupShape(index, apps.size))) {
-            AppRow(app, rule, onToggle = { onSave(rule.copy(show = it)) }, onClick = { onExpand(if (open) null else app.packageName) })
+            // Switching an app back on also lifts a long-press Mute.
+            AppRow(app, rule, onToggle = { onSave(rule.copy(show = it, muted = rule.muted && !it)) }, onClick = { onExpand(if (open) null else app.packageName) })
             AnimatedVisibility(open) { RuleEditor(rule, onSave) }
         }
     }
@@ -147,6 +165,7 @@ private fun LiveCard(live: LiveSettings, onLive: ((LiveSettings) -> LiveSettings
             GlassChip("Music", { onLive { it.copy(media = !it.media) } }, Icons.Rounded.MusicNote, live.media)
             GlassChip("Calls", { onLive { it.copy(calls = !it.calls) } }, Icons.Rounded.Call, live.calls)
             GlassChip("Progress", { onLive { it.copy(progress = !it.progress) } }, Icons.Rounded.Download, live.progress)
+            GlassChip("Timers", { onLive { it.copy(timers = !it.timers) } }, Icons.Rounded.Timer, live.timers)
             GlassChip("Charging", { onLive { it.copy(charging = !it.charging) } }, Icons.Rounded.Bolt, live.charging)
             GlassChip("Battery low", { onLive { it.copy(batteryLow = !it.batteryLow) } }, Icons.Rounded.BatteryAlert, live.batteryLow)
             GlassChip("Ringer", { onLive { it.copy(ringer = !it.ringer) } }, Icons.Rounded.NotificationsActive, live.ringer)
@@ -205,6 +224,7 @@ private fun AppRow(app: AppEntry, rule: AppRule, onToggle: (Boolean) -> Unit, on
         Column(Modifier.weight(1f)) {
             Text(app.label, color = glass.content, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
             val details = buildList {
+                if (rule.muted) add("Muted")
                 if (rule.show) add(priorityLabel(rule.priority))
                 if (rule.autoExpand) add("Expands")
                 if (rule.hideContentOnLock) add("Private on lock")

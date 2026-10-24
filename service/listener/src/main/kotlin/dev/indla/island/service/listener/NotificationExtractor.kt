@@ -7,6 +7,8 @@ import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
 import android.os.Build
+import android.os.Bundle
+import android.os.SystemClock
 import android.service.notification.NotificationListenerService.Ranking
 import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
@@ -41,6 +43,9 @@ class NotificationExtractor @Inject constructor(
         val style = runCatching { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(n) }.getOrNull()
         val progressMax = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
         val indeterminate = extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false)
+        val metric = metric(extras)
+        // Android 16 promoted ongoing notifications may carry their glance as short critical text.
+        val criticalText = extras.getCharSequence(EXTRA_SHORT_CRITICAL_TEXT)?.toString()
 
         return RawNotification(
             key = sbn.key,
@@ -54,8 +59,8 @@ class NotificationExtractor @Inject constructor(
             ongoing = sbn.isOngoing || n.flags and Notification.FLAG_FOREGROUND_SERVICE != 0,
             category = n.category,
             channelId = n.channelId,
-            title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
-            text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+            title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: metric?.label,
+            text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: criticalText,
             bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString(),
             subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString(),
             conversationTitle = style?.conversationTitle?.toString(),
@@ -82,14 +87,34 @@ class NotificationExtractor @Inject constructor(
             callCanAnswer = extras.containsKey(Notification.EXTRA_ANSWER_INTENT),
             callCanDecline = extras.containsKey(Notification.EXTRA_DECLINE_INTENT),
             callCanHangUp = extras.containsKey(Notification.EXTRA_HANG_UP_INTENT),
-            chronometerBase = if (extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)) {
-                n.`when`.takeIf { it > 0 }
-            } else {
-                null
+            chronometerBase = when {
+                extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false) -> n.`when`.takeIf { it > 0 }
+                else -> metric?.baseWallMs
             },
+            chronometerCountDown = extras.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN, false) || metric?.countDown == true,
             largeIconKey = n.getLargeIcon()?.let { cacheIcon("$pkg|large|${sbn.key}", it) },
             appAccentArgb = apps.accent(pkg),
             isSelfTest = pkg == context.packageName && n.channelId == TestNotificationPoster.CHANNEL_ID,
+        )
+    }
+
+    private class Metric(val label: String?, val baseWallMs: Long?, val countDown: Boolean)
+
+    /**
+     * Newer Clock apps post timers as `MetricStyle`: `android.metrics` holds bundles with a label
+     * and a value whose `zeroElapsedRealtime` is when a countdown reaches zero (or a stopwatch
+     * started). Converted to wall-clock time so it ticks like a chronometer.
+     */
+    private fun metric(extras: Bundle): Metric? {
+        @Suppress("DEPRECATION")
+        val list = (extras.get(EXTRA_METRICS) as? List<*>)?.filterIsInstance<Bundle>()?.takeIf { it.isNotEmpty() } ?: return null
+        val chosen = list.getOrNull(extras.getInt(EXTRA_METRICS_CRITICAL, 0)) ?: list.first()
+        val value = chosen.getBundle("value")
+        val zero = value?.getLong("zeroElapsedRealtime", -1L)?.takeIf { it > 0 }
+        return Metric(
+            label = chosen.getCharSequence("label")?.toString(),
+            baseWallMs = zero?.let { System.currentTimeMillis() + (it - SystemClock.elapsedRealtime()) },
+            countDown = value?.getBoolean("countDown", false) == true,
         )
     }
 
@@ -147,6 +172,9 @@ class NotificationExtractor @Inject constructor(
 
     private companion object {
         const val ICON_PX = 128
+        const val EXTRA_METRICS = "android.metrics"
+        const val EXTRA_METRICS_CRITICAL = "android.metrics.criticalIndex"
+        const val EXTRA_SHORT_CRITICAL_TEXT = "android.shortCriticalText"
         val REDACTED_STRING_NAMES = listOf("redacted_notification_message", "redacted_otp_notification_message")
     }
 }

@@ -134,6 +134,7 @@ fun IslandApp(showDebug: Boolean) {
                                 onSave = { vm.saveRule(it) },
                                 live = s.live,
                                 onLive = { vm.updateLive(it) },
+                                onSetAll = { vm.setAllApps(it) },
                             )
                             else -> LookScreen(
                                 settings = s,

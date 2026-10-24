@@ -26,7 +26,9 @@ object DataModule {
     @Provides
     @Singleton
     fun database(@ApplicationContext context: Context): AppRuleDatabase =
-        Room.databaseBuilder(context, AppRuleDatabase::class.java, "island.db").build()
+        Room.databaseBuilder(context, AppRuleDatabase::class.java, "island.db")
+            .addMigrations(AppRuleDatabase.MIGRATION_1_2)
+            .build()
 
     @Provides
     fun ruleDao(db: AppRuleDatabase): AppRuleDao = db.rules()

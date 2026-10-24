@@ -90,10 +90,20 @@ class SettingsViewModel @Inject constructor(
 
     fun saveRule(rule: AppRule) = viewModelScope.launch { rulesRepo.save(rule) }
 
-    /** Last onboarding step: the checked apps show, everything else in the list stays off. */
-    fun finishOnboarding(selected: Set<String>) = viewModelScope.launch {
+    /** "All apps" switch: every listed app's notifications on (lifting any mute) or off. */
+    fun setAllApps(show: Boolean) = viewModelScope.launch {
         val apps = _apps.value.orEmpty()
-        rulesRepo.saveAll(apps.map { ruleFor(it.packageName).copy(show = it.packageName in selected) })
+        rulesRepo.saveAll(apps.map { app -> ruleFor(app.packageName).let { it.copy(show = show, muted = it.muted && !show) } })
+    }
+
+    /**
+     * Last onboarding step: only the chat apps listed there get a rule. Writing "off" rules for
+     * every other app would hide nothing new (they're off by default) but would pin choices the
+     * user never made.
+     */
+    fun finishOnboarding(selected: Set<String>) = viewModelScope.launch {
+        val chats = _apps.value.orEmpty().filter { it.isMessaging }
+        rulesRepo.saveAll(chats.map { ruleFor(it.packageName).copy(show = it.packageName in selected) })
         settingsRepo.update { it.copy(onboardingDone = true) }
     }
 
