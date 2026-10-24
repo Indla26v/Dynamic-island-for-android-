@@ -23,6 +23,8 @@ data class IslandItem(
     val hideContentOnLock: Boolean = false,
     /** Set for live activities; drives their compact and expanded layouts. */
     val live: LiveContent? = null,
+    /** Set when this item is one page of several sharing the island (not part of [contentHash]). */
+    val stack: StackInfo? = null,
 ) {
     /**
      * Two posts with the same key and hash are the same content; the second is ignored. Live
@@ -34,6 +36,19 @@ data class IslandItem(
 
     val isLive: Boolean get() = live != null
 }
+
+/**
+ * Several notifications in one island slot: one app's notifications, or the missed pile (what
+ * came and went while nobody looked). Pages run oldest to newest; a swipe moves between them.
+ */
+data class StackInfo(
+    val size: Int,
+    /** The page shown, 0 = oldest. */
+    val index: Int,
+    val missed: Boolean = false,
+    /** Other apps in the pile, newest first, at most three: drawn as overlapping icons. */
+    val otherPackages: List<String> = emptyList(),
+)
 
 enum class ItemKind {
     MESSAGE,

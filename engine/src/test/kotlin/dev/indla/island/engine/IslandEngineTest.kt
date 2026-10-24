@@ -36,7 +36,10 @@ class IslandEngineTest {
     }
 
     private class Harness(scope: TestScope) {
-        val settings = MutableStateFlow(IslandSettings(autoHideSeconds = 5))
+        // Stacking and the missed pile have their own tests; the rest see one item per post.
+        val settings = MutableStateFlow(
+            IslandSettings(autoHideSeconds = 5, whenToShow = WhenToShow(keepMissed = false, stackByApp = false)),
+        )
         val rules = MutableStateFlow<Map<String, AppRule>>(emptyMap())
         val effects = RecordingEffects()
         val engine = IslandEngine(scope.backgroundScope, settings, rules, clock = { scope.testScheduler.currentTime })
@@ -139,7 +142,7 @@ class IslandEngineTest {
         h.engine.updateEnvironment(Environment())
         assertTrue(h.state.visible)
 
-        h.settings.value = h.settings.value.copy(whenToShow = WhenToShow(hideInLandscape = false))
+        h.settings.value = h.settings.value.copy(whenToShow = h.settings.value.whenToShow.copy(hideInLandscape = false))
         runCurrent()
         h.engine.updateEnvironment(Environment(landscape = true))
         assertTrue(h.state.visible)
@@ -335,6 +338,81 @@ class IslandEngineTest {
         assertEquals(ItemKind.MEDIA, h.state.current?.kind)
         h.engine.onMedia(Fixtures.music(playing = false))
         advanceTimeBy(IslandEngine.LIVE_LINGER_MS + 100); runCurrent()
+        assertEquals(IslandMode.REST, h.state.mode)
+    }
+
+    private fun Harness.stackAndKeep() {
+        settings.value = settings.value.copy(whenToShow = settings.value.whenToShow.copy(keepMissed = true, stackByApp = true))
+    }
+
+    private fun otherChat() = Fixtures.whatsAppDirect().copy(
+        key = "0|com.whatsapp|1|918888888888@s.whatsapp.net|10123",
+        title = "Arjun",
+        text = "Running late",
+        messages = listOf(dev.indla.island.model.RawMessage("Running late", 2_000, dev.indla.island.model.RawPerson("Arjun", key = "arjun"))),
+    )
+
+    @Test
+    fun sameApp_stacksIntoOneSlot_swipePagesThroughIt() = test { h ->
+        h.stackAndKeep(); runCurrent()
+        h.engine.onPosted(Fixtures.whatsAppDirect())
+        h.engine.onPosted(otherChat())
+        assertEquals("one slot for the app", 1, h.state.items.size)
+        assertEquals(IslandMode.COMPACT, h.state.mode)
+        assertEquals("Arjun", h.state.current?.title)
+        assertEquals(2, h.state.current?.stack?.size)
+        assertEquals(1, h.state.current?.stack?.index)
+
+        h.engine.onGesture(IslandGesture.SWIPE_RIGHT)
+        assertEquals("right goes to the older message", "Priya Rao", h.state.current?.title)
+        h.engine.onGesture(IslandGesture.SWIPE_LEFT)
+        assertEquals("left comes back to the newer one", "Arjun", h.state.current?.title)
+    }
+
+    @Test
+    fun openingOnePage_keepsTheRestOfTheStack() = test { h ->
+        h.stackAndKeep(); runCurrent()
+        h.engine.onPosted(Fixtures.whatsAppDirect())
+        h.engine.onPosted(otherChat())
+        h.engine.onGesture(IslandGesture.TAP)
+        h.engine.onGesture(IslandGesture.TAP) // expanded tap opens the chat
+        assertEquals(listOf("open:${otherChat().key}"), h.effects.calls)
+        assertEquals("Priya Rao", h.state.current?.title)
+        assertEquals(null, h.state.current?.stack)
+    }
+
+    @Test
+    fun unopened_staysAsMissedPile_untilLookedAt() = test { h ->
+        h.stackAndKeep(); runCurrent()
+        h.engine.onPosted(Fixtures.whatsAppDirect())
+        h.engine.onPosted(Fixtures.instagramGroupReels())
+        advanceTimeBy(5_100); runCurrent()
+        assertEquals("both wait in one pile", 1, h.state.items.size)
+        val pile = h.state.current?.stack
+        assertTrue(pile?.missed == true)
+        assertEquals(2, pile?.size)
+
+        h.engine.onGesture(IslandGesture.TAP)
+        assertEquals(IslandMode.EXPANDED, h.state.mode)
+        assertEquals("starts at the oldest", 0, h.state.current?.stack?.index)
+        h.engine.onGesture(IslandGesture.SWIPE_LEFT)
+        assertEquals(1, h.state.current?.stack?.index)
+        h.engine.onGesture(IslandGesture.SWIPE_UP) // collapse: both pages were seen
+        assertEquals(IslandMode.REST, h.state.mode)
+    }
+
+    @Test
+    fun postedWhileHidden_waitsInPile_andLeavesWhenRead() = test { h ->
+        h.stackAndKeep(); runCurrent()
+        h.engine.updateEnvironment(Environment(fullscreen = true))
+        h.engine.onPosted(Fixtures.whatsAppDirect())
+        assertFalse(h.state.visible)
+        assertTrue(h.state.current?.stack?.missed == true)
+        h.engine.updateEnvironment(Environment(fullscreen = false))
+        assertTrue(h.state.visible)
+        assertEquals(IslandMode.COMPACT, h.state.mode)
+
+        h.engine.onRemoved(Fixtures.whatsAppDirect().key) // read in the shade or the app
         assertEquals(IslandMode.REST, h.state.mode)
     }
 

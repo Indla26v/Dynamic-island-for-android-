@@ -5,6 +5,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
@@ -64,6 +66,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
@@ -145,12 +148,73 @@ private fun RowScope.CompactLeading(item: IslandItem, size: Dp, accent: Color) {
         is LiveContent.System -> Icon(systemIcon(live.event), null, tint = systemColor(live.event, accent), modifier = Modifier.size(size * 0.85f))
         is LiveContent.Progress -> ItemIcon(item, size)
         is LiveContent.Timer -> Icon(Icons.Rounded.Timer, null, tint = TimerOrange, modifier = Modifier.size(size * 0.85f))
-        null -> ItemAvatar(item, item.avatarKey, size)
+        null -> StackedAvatar(item, size)
+    }
+}
+
+/**
+ * A stack shows what's behind the front page: for one app, a disc peeking out; for the missed
+ * pile, the other apps' icons fanned out behind the newest.
+ */
+@Composable
+private fun StackedAvatar(item: IslandItem, size: Dp) {
+    val stack = item.stack
+    if (stack == null) {
+        ItemAvatar(item, item.avatarKey, size)
+        return
+    }
+    val peek = size * 0.42f
+    val behind = if (stack.missed) stack.otherPackages.take(2) else emptyList()
+    val layers = if (behind.isNotEmpty()) behind.size else 1
+    Box(Modifier.width(size + peek * layers).height(size)) {
+        if (behind.isEmpty()) {
+            Box(
+                Modifier
+                    .offset(x = peek)
+                    .size(size)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.16f)),
+            )
+        } else {
+            behind.asReversed().forEachIndexed { i, pkg ->
+                val depth = behind.size - i
+                Box(
+                    Modifier
+                        .offset(x = peek * depth)
+                        .size(size)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1C1C1E))
+                        .alpha(1f - 0.25f * depth),
+                    contentAlignment = Alignment.Center,
+                ) { AppIconImage(pkg, size * 0.78f) }
+            }
+        }
+        Box(Modifier.size(size).clip(CircleShape).background(Color.Black)) { ItemAvatar(item, item.avatarKey, size) }
+    }
+}
+
+/** How many notifications a stack holds: a small pill in the app's colour. */
+@Composable
+private fun CountBadge(count: Int, accent: Color, missed: Boolean) {
+    Row(
+        Modifier
+            .height(18.dp)
+            .clip(CircleShape)
+            .background(accent)
+            .padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val ink = if (accent.luminance() > 0.5f) Color.Black else Color.White
+        if (missed) {
+            Icon(Icons.Rounded.History, null, tint = ink, modifier = Modifier.size(12.dp))
+            Spacer(Modifier.width(2.dp))
+        }
+        Text("$count", color = ink, fontSize = 11.sp, fontWeight = FontWeight.Bold, style = Tabular, maxLines = 1)
     }
 }
 
 @Composable
-private fun CompactTrailing(item: IslandItem, accent: Color, minimal: Boolean) {
+private fun RowScope.CompactTrailing(item: IslandItem, accent: Color, minimal: Boolean) {
     when (val live = item.live) {
         is LiveContent.Media -> WaveBars(accent, live.playing, Modifier.size(22.dp, 16.dp))
         is LiveContent.Call -> when (live.state) {
@@ -178,10 +242,19 @@ private fun CompactTrailing(item: IslandItem, accent: Color, minimal: Boolean) {
                 GlanceText(live.label, color)
             }
         }
-        null -> if (minimal) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(accent))
-        } else {
-            GlanceText(item.glance, accent)
+        null -> {
+            val stack = item.stack
+            when {
+                minimal -> Box(Modifier.size(8.dp).clip(CircleShape).background(accent))
+                stack != null -> {
+                    if (!stack.missed) {
+                        Box(Modifier.weight(1f, fill = false)) { GlanceText(item.glance, accent) }
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    CountBadge(stack.size, accent, stack.missed)
+                }
+                else -> GlanceText(item.glance, accent)
+            }
         }
     }
 }
@@ -228,19 +301,45 @@ private fun ExpandedContent(
     drawReplyHint: Boolean,
 ) {
     val pad = 18f
-    Column(Modifier.fillMaxSize().padding(horizontal = pad.dp)) {
-        Band(item, layout, rect, pad, accent)
-        when {
-            state.quickActionsOpen -> QuickActions(item, registry)
-            item.live is LiveContent.Call -> CallBody(item, item.live as LiveContent.Call, registry)
-            item.live is LiveContent.Media -> MediaBody(item, item.live as LiveContent.Media, accent, registry)
-            item.live is LiveContent.Progress -> ProgressBody(item, item.live as LiveContent.Progress, accent, registry)
-            item.live is LiveContent.System -> SystemBody(item.live as LiveContent.System, accent)
-            item.live is LiveContent.Timer -> TimerBody(item, item.live as LiveContent.Timer, registry)
-            else -> NotificationBody(item, state.replyOpen, registry, drawReplyHint)
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().padding(horizontal = pad.dp)) {
+            Band(item, layout, rect, pad, accent)
+            when {
+                state.quickActionsOpen -> QuickActions(item, registry)
+                item.live is LiveContent.Call -> CallBody(item, item.live as LiveContent.Call, registry)
+                item.live is LiveContent.Media -> MediaBody(item, item.live as LiveContent.Media, accent, registry)
+                item.live is LiveContent.Progress -> ProgressBody(item, item.live as LiveContent.Progress, accent, registry)
+                item.live is LiveContent.System -> SystemBody(item.live as LiveContent.System, accent)
+                item.live is LiveContent.Timer -> TimerBody(item, item.live as LiveContent.Timer, registry)
+                else -> NotificationBody(item, state.replyOpen, registry, drawReplyHint)
+            }
+        }
+        val stack = item.stack
+        if (stack != null && stack.size > 1 && !state.replyOpen && !state.quickActionsOpen) {
+            PageDots(stack.size, stack.index, accent, Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp))
         }
     }
 }
+
+/** Where in a stack the card is: the current page is a longer dot in the app's colour. */
+@Composable
+private fun PageDots(count: Int, index: Int, accent: Color, modifier: Modifier) {
+    // Long stacks show a window of seven around the current page.
+    val shown = minOf(count, MAX_DOTS)
+    val first = (index - MAX_DOTS / 2).coerceIn(0, count - shown)
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        for (i in first until first + shown) {
+            val current = i == index
+            val width by animateDpAsState(if (current) 14.dp else 5.dp, spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow), label = "dot")
+            val colour by animateColorAsState(if (current) accent else Color.White.copy(alpha = 0.3f), tween(200), label = "dotColour")
+            // Dots at the window's edges shrink to hint that there's more.
+            val edge = (i == first && first > 0) || (i == first + shown - 1 && first + shown < count)
+            Box(Modifier.width(width).height(if (edge) 3.dp else 5.dp).clip(CircleShape).background(colour))
+        }
+    }
+}
+
+private const val MAX_DOTS = 7
 
 /** The camera row: small accessories left and right of the camera, nothing under it. */
 @Composable
@@ -250,7 +349,11 @@ private fun Band(item: IslandItem, layout: IslandLayout, rect: IslandRect, pad: 
     val rightWidth = (rect.width - camera - layout.cameraGap / 2 - pad).coerceAtLeast(0f)
     Row(Modifier.fillMaxWidth().height(layout.bandHeight.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.width(leftWidth.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (item.kind != ItemKind.SYSTEM && !isIslandPackage(item.packageName)) {
+            if (item.stack?.missed == true) {
+                Icon(Icons.Rounded.History, null, tint = accent, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(5.dp))
+                Text("Missed · ${item.appLabel}", color = Secondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            } else if (item.kind != ItemKind.SYSTEM && !isIslandPackage(item.packageName)) {
                 AppIconImage(item.packageName, 16.dp)
                 Spacer(Modifier.width(6.dp))
                 Text(item.appLabel, color = Secondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -271,7 +374,11 @@ private fun Band(item: IslandItem, layout: IslandLayout, rect: IslandRect, pad: 
                 is LiveContent.Timer -> Unit
                 null -> {
                     val now by rememberNow(30_000)
-                    Text(relativeTime(item.postTime, now), color = Secondary, fontSize = 12.sp)
+                    item.stack?.takeIf { it.size > 1 }?.let { stack ->
+                        Text("${stack.index + 1}/${stack.size}", color = accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, style = Tabular)
+                        Text("  ·  ", color = Secondary, fontSize = 12.sp)
+                    }
+                    Text(relativeTime(item.postTime, now), color = Secondary, fontSize = 12.sp, maxLines = 1)
                 }
             }
         }

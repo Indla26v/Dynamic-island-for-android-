@@ -217,6 +217,18 @@ fun LookScreen(
                 GlassToggleRow("Hide in landscape", w.hideInLandscape, { v -> onWhenToShow { it.copy(hideInLandscape = v) } })
                 GlassToggleRow("Hide with the shade open", w.hideWhenShadeOpen, { v -> onWhenToShow { it.copy(hideWhenShadeOpen = v) } })
                 GlassToggleRow("Show on the lockscreen", w.showOnLockscreen, { v -> onWhenToShow { it.copy(showOnLockscreen = v) } })
+                GlassToggleRow(
+                    "Keep missed notifications",
+                    w.keepMissed,
+                    { v -> onWhenToShow { it.copy(keepMissed = v) } },
+                    subtitle = "Unopened ones stay as a small pile; tap it to catch up",
+                )
+                GlassToggleRow(
+                    "Stack each app",
+                    w.stackByApp,
+                    { v -> onWhenToShow { it.copy(stackByApp = v) } },
+                    subtitle = "One app's notifications share a slot; swipe to page through",
+                )
                 RowDivider(start = Space.rowPadding)
                 GlassSliderRow(
                     "Stay for",

@@ -18,6 +18,7 @@ import dev.indla.island.model.MessageLine
 import dev.indla.island.model.Priority
 import dev.indla.island.model.RawNotification
 import dev.indla.island.model.ServiceHealth
+import dev.indla.island.model.StackInfo
 import dev.indla.island.model.SystemEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -35,7 +36,9 @@ import kotlinx.coroutines.launch
  * two racing events can never draw two islands.
  *
  * Two kinds of items share one list:
- * - transient items (notifications, system events) pop and expire after the auto-hide time;
+ * - transient items (notifications, system events) pop and expire after the auto-hide time.
+ *   One app's notifications stack into a single entry whose pages a swipe moves through, and
+ *   the ones that leave unopened gather in a "missed" pile until they are looked at or read;
  * - live activities (calls, playing media, progress) stay while they're happening. They are
  *   parked, not dropped, while their own app is in front, and a swipe-up hides one only until
  *   it changes in a way that matters (a new track, a call answered).
@@ -63,7 +66,17 @@ class IslandEngine(
     private val pendingPosts = ArrayDeque<RawNotification>()
     private var env = Environment()
 
-    private class Active(var item: IslandItem, var expiresAt: Long, val selfTest: Boolean) {
+    private class Active(item: IslandItem, var expiresAt: Long, val selfTest: Boolean, val missed: Boolean = false) {
+        /** Oldest first. One page, unless notifications stacked. */
+        val pages = mutableListOf(item)
+        var page = 0
+        /** Pages the user looked at in the expanded card: those aren't missed. */
+        val viewed = HashSet<String>()
+        var item: IslandItem
+            get() = pages[page]
+            set(value) {
+                pages[page] = value
+            }
         val persistent: Boolean get() = expiresAt == FOREVER
     }
 
@@ -154,33 +167,65 @@ class IslandEngine(
 
         // Summaries never pop while their children are there; a child replaces its summary.
         if (item.isGroupSummary && item.groupKey != null) {
-            val childShown = active.any { it.item.groupKey == item.groupKey && !it.item.isGroupSummary }
+            val childShown = active.any { e -> e.pages.any { it.groupKey == item.groupKey && !it.isGroupSummary } }
             if (raw.groupHasChildren || childShown) return
         } else if (item.groupKey != null) {
-            removeWhere { it.item.isGroupSummary && it.item.groupKey == item.groupKey }
+            removePages { it.isGroupSummary && it.groupKey == item.groupKey }
         }
 
         // A notification that used to be live (a finished download) is a normal post now.
         parked.removeAll { it.item.key == raw.key }
-        val existing = active.indexOfFirst { it.item.key == raw.key }
+        val holder = active.firstOrNull { e -> !e.missed && e.pages.any { it.key == raw.key } }
         // A chat update whose newest message is the user's own (an inline reply echoed back by
         // the app) is never news, even though the content changed.
         val ownEcho = raw.messages.maxByOrNull { it.timestamp }?.let { it.sender == null } == true
         val silent = isSilent(raw, item.priority) || ownEcho
-        if (existing >= 0 && !active[existing].persistent && (raw.onlyAlertOnce || silent)) {
+        if (holder != null && !holder.persistent && (raw.onlyAlertOnce || silent)) {
             // Already on screen: refresh the content in place without popping again.
-            active[existing].item = item
+            holder.pages[holder.pages.indexOfFirst { it.key == raw.key }] = item
             publish()
             return
         }
         if (silent || !canPop(raw.packageName, item.priority, raw.isSelfTest)) {
-            if (existing >= 0) removeAt(existing)
+            removePages({ !it.missed }) { it.key == raw.key }
+            val pile = missedPile()
+            val inPile = pile?.pages?.indexOfFirst { it.key == raw.key } ?: -1
+            when {
+                // Hidden (full screen, locked): it'll be waiting in the pile afterwards.
+                !silent && missable(raw.packageName) -> addMissed(listOf(item))
+                inPile >= 0 -> pile!!.pages[inPile] = item
+            }
             publish()
             return
         }
 
-        if (existing >= 0) removeAt(existing)
-        insert(Active(item, clock() + autoHideMs(item), raw.isSelfTest), autoExpand = explicit?.autoExpand == true)
+        // Popping now: no longer missed, and it joins its app's stack as the newest page.
+        removePages { it.key == raw.key }
+        val autoExpand = explicit?.autoExpand == true
+        val stack = if (settings.whenToShow.stackByApp) {
+            active.firstOrNull { !it.missed && !it.persistent && !it.item.isLive && it.item.kind != ItemKind.SYSTEM && it.item.packageName == item.packageName }
+        } else {
+            null
+        }
+        when {
+            stack == null -> insert(Active(item, clock() + autoHideMs(item), raw.isSelfTest), autoExpand)
+            // Someone is typing on this stack: add the page without turning it under them.
+            busy() && stack === active.getOrNull(currentIndex) -> stack.pages += item
+            // Reading this stack: stay open and turn to the new message.
+            expanded && stack === active.getOrNull(currentIndex) -> {
+                stack.pages += item
+                stack.page = stack.pages.lastIndex
+                stack.expiresAt = clock() + autoHideMs(item)
+                expandedDeadline = clock() + EXPANDED_IDLE_MS
+            }
+            else -> {
+                stack.pages += item
+                stack.page = stack.pages.lastIndex
+                stack.expiresAt = clock() + autoHideMs(item)
+                removeAt(active.indexOf(stack))
+                insert(stack, autoExpand)
+            }
+        }
         publish()
     }
 
@@ -332,7 +377,7 @@ class IslandEngine(
     fun onMuteApp() {
         val item = current() ?: return
         effects.muteApp(item.packageName)
-        removeWhere { it.item.packageName == item.packageName }
+        removePages { it.packageName == item.packageName }
         parked.removeAll { it.item.packageName == item.packageName }
         collapse()
         publish()
@@ -363,6 +408,7 @@ class IslandEngine(
     fun onSelectItem(index: Int) {
         if (index !in active.indices) return
         currentIndex = index
+        openStack(active[index])
         replyOpen = false
         quickActionsOpen = false
         expanded = true
@@ -390,9 +436,8 @@ class IslandEngine(
         env = newEnv
         if (foregroundChanged && settings.whenToShow.hideInForegroundApp && newEnv.foregroundPackage != null) {
             // The user is in that app now; the island has nothing new to tell them about it.
-            removeWhere {
-                !it.item.isLive && it.item.packageName == newEnv.foregroundPackage &&
-                    !it.selfTest && it.item.priority != Priority.HIGH
+            removePages({ !it.selfTest }) {
+                !it.isLive && it.packageName == newEnv.foregroundPackage && it.priority != Priority.HIGH
             }
         }
         reconcileParking()
@@ -504,17 +549,69 @@ class IslandEngine(
             expanded = autoExpand
             if (expanded) expandedDeadline = clock() + EXPANDED_IDLE_MS
         }
-        // Over the limit, drop the oldest transient item; live activities stay.
+        // Over the limit, the oldest transient item makes room (into the missed pile); live
+        // activities and the pile stay.
         while (active.size > MAX_ITEMS) {
             val victim = active.indexOfLast { !it.persistent }.takeIf { it > 0 } ?: break
+            val gone = active[victim]
             removeAt(victim)
+            retire(gone)
         }
+    }
+
+    /** The pile of notifications that left the island unopened. */
+    private fun missedPile(): Active? = active.firstOrNull { it.missed }
+
+    /** Whether a notification that couldn't pop will still be news later. */
+    private fun missable(packageName: String) = settings.enabled && settings.whenToShow.keepMissed &&
+        !env.shadeOpen && env.foregroundPackage != packageName
+
+    /** An entry leaving the island: whatever nobody looked at goes to the missed pile. */
+    private fun retire(entry: Active) {
+        if (entry.missed || entry.item.isLive) return
+        addMissed(entry.pages.filter { it.key !in entry.viewed })
+    }
+
+    private fun addMissed(items: List<IslandItem>) {
+        if (!settings.whenToShow.keepMissed) return
+        val fresh = items.filter { !it.isLive && it.kind != ItemKind.SYSTEM }
+        if (fresh.isEmpty()) return
+        val pile = missedPile() ?: Active(fresh.first(), FOREVER, selfTest = false, missed = true).also {
+            it.pages.clear()
+            active.add(it)
+        }
+        for (item in fresh) {
+            pile.pages.removeAll { it.key == item.key }
+            pile.pages += item
+        }
+        while (pile.pages.size > MAX_MISSED) pile.pages.removeAt(0)
+        // Don't turn the page under someone reading the pile.
+        if (!(expanded && pile === active.getOrNull(currentIndex))) pile.page = pile.pages.lastIndex
+    }
+
+    /** Opening the pile starts at the oldest missed notification; a swipe goes to newer ones. */
+    private fun openStack(entry: Active) {
+        if (entry.missed && !expanded) entry.page = 0
+    }
+
+    /** Removes matching pages from entries passing [entryFilter]; emptied entries go. */
+    private fun removePages(entryFilter: (Active) -> Boolean = { true }, predicate: (IslandItem) -> Boolean) {
+        for (e in active) {
+            if (!entryFilter(e) || e.pages.none(predicate)) continue
+            val shown = e.item
+            e.pages.removeAll(predicate)
+            e.viewed.retainAll(e.pages.mapTo(HashSet()) { it.key })
+            val i = e.pages.indexOf(shown)
+            e.page = if (i >= 0) i else e.page.coerceAtMost(e.pages.lastIndex).coerceAtLeast(0)
+        }
+        removeWhere { it.pages.isEmpty() }
     }
 
     private fun perform(action: GestureAction, gesture: IslandGesture) {
         val item = current() ?: return
         when (action) {
             GestureAction.EXPAND -> {
+                openStack(active[currentIndex])
                 expanded = true
                 quickActionsOpen = false
             }
@@ -526,13 +623,20 @@ class IslandEngine(
                 }
             }
             GestureAction.HIDE -> {
-                active.filter { it.persistent }.forEach(::hideLive)
+                active.filter { it.persistent && it.item.isLive }.forEach(::hideLive)
                 clearIsland()
             }
             GestureAction.COLLAPSE -> collapse()
-            GestureAction.SWITCH_ITEM -> if (active.size > 1) {
+            GestureAction.SWITCH_ITEM -> {
+                // Left = newer page, right = older; past either end of a stack, the next item.
                 val step = if (gesture == IslandGesture.SWIPE_RIGHT) -1 else 1
-                currentIndex = (currentIndex + step).mod(active.size)
+                val entry = active[currentIndex]
+                val page = entry.page + step
+                when {
+                    page in entry.pages.indices -> entry.page = page
+                    active.size > 1 -> currentIndex = (currentIndex + step).mod(active.size)
+                    else -> return
+                }
                 replyOpen = false
                 quickActionsOpen = false
             }
@@ -586,6 +690,13 @@ class IslandEngine(
         quickActionsOpen = false
         val now = clock()
         active.forEach { if (!it.persistent) it.expiresAt = maxOf(it.expiresAt, now + autoHideMs(it.item)) }
+        // What the user paged through in the pile has been seen.
+        missedPile()?.let { pile ->
+            pile.pages.removeAll { it.key in pile.viewed }
+            pile.viewed.clear()
+            pile.page = pile.pages.lastIndex.coerceAtLeast(0)
+            if (pile.pages.isEmpty()) removeWhere { it === pile }
+        }
     }
 
     private fun clearIsland() {
@@ -596,8 +707,14 @@ class IslandEngine(
         quickActionsOpen = false
     }
 
+    /** Removes the page on screen (opened, replied, dismissed); the rest of its stack stays. */
     private fun removeCurrent() {
-        if (currentIndex in active.indices) active.removeAt(currentIndex)
+        active.getOrNull(currentIndex)?.let { e ->
+            e.viewed.remove(e.item.key)
+            e.pages.removeAt(e.page)
+            e.page = e.page.coerceAtMost(e.pages.lastIndex).coerceAtLeast(0)
+            if (e.pages.isEmpty()) active.removeAt(currentIndex)
+        }
         currentIndex = 0
         // Whatever queued up while the user was busy gets a fresh turn on screen.
         collapse()
@@ -605,9 +722,8 @@ class IslandEngine(
     }
 
     private fun removeKey(key: String) {
-        val index = active.indexOfFirst { it.item.key == key }
-        if (index < 0) return
-        removeAt(index)
+        if (active.none { e -> e.pages.any { it.key == key } }) return
+        removePages { it.key == key }
         publish()
     }
 
@@ -662,6 +778,7 @@ class IslandEngine(
             quickActionsOpen = false
         }
         currentIndex = currentIndex.coerceIn(0, (active.size - 1).coerceAtLeast(0))
+        if (expanded) active.getOrNull(currentIndex)?.let { it.viewed += it.item.key }
         val mode = when {
             active.isEmpty() -> IslandMode.REST
             expanded -> IslandMode.EXPANDED
@@ -671,7 +788,7 @@ class IslandEngine(
         _state.value = IslandUiState(
             mode = mode,
             visible = isVisible(),
-            items = active.map { lockRedacted(it.item) },
+            items = active.map { lockRedacted(withStack(it)) },
             currentIndex = currentIndex,
             replyOpen = replyOpen,
             quickActionsOpen = quickActionsOpen,
@@ -679,6 +796,16 @@ class IslandEngine(
             appearance = previewScale?.let { settings.appearance.copy(sizeScale = it) } ?: settings.appearance,
         )
         reschedule()
+    }
+
+    private fun withStack(e: Active): IslandItem {
+        if (e.pages.size < 2 && !e.missed) return e.item
+        val others = if (e.missed) {
+            e.pages.asReversed().map { it.packageName }.filter { it != e.item.packageName }.distinct().take(3)
+        } else {
+            emptyList()
+        }
+        return e.item.copy(stack = StackInfo(e.pages.size, e.page, e.missed, others))
     }
 
     private fun reschedule() {
@@ -703,7 +830,9 @@ class IslandEngine(
         if (expanded) {
             if (!replyOpen && !holding && now >= expandedDeadline) collapse()
         } else {
-            removeWhere { it.expiresAt <= now }
+            val expired = active.filter { it.expiresAt <= now }
+            removeWhere { it in expired }
+            expired.forEach(::retire)
         }
         publish()
     }
@@ -714,6 +843,7 @@ class IslandEngine(
         /** How long paused media stays before it leaves the island. */
         const val LIVE_LINGER_MS = 10_000L
         const val MAX_ITEMS = 5
+        const val MAX_MISSED = 20
         const val SYSTEM_PACKAGE = "android"
         const val SYSTEM_KEY_PREFIX = "system:"
         private const val MAX_SEEN = 256

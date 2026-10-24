@@ -106,8 +106,15 @@ fun IslandSurface(
                 shown.current?.key != latest.current?.key
             if (!shrinking) contentAlpha.animateTo(0f, tween(CONTENT_DELAY_MS.toInt()))
             else delay(CONTENT_DELAY_MS)
-            val forward = latest.items.indexOfFirst { it.key == latest.current?.key } >=
-                latest.items.indexOfFirst { it.key == shown.current?.key }
+            val from = shown.current?.stack
+            val to = latest.current?.stack
+            // Within one stack, pages run oldest to newest; between items, list order.
+            val forward = if (from != null && to != null && from.missed == to.missed && shown.currentIndex == latest.currentIndex) {
+                to.index >= from.index
+            } else {
+                latest.items.indexOfFirst { it.key == latest.current?.key } >=
+                    latest.items.indexOfFirst { it.key == shown.current?.key }
+            }
             shown = latest
             if (switching) {
                 contentShift.snapTo(if (forward) SLIDE_DP else -SLIDE_DP)
@@ -118,6 +125,12 @@ fun IslandSurface(
             shown = latest
             if (contentAlpha.value < 1f) contentAlpha.animateTo(1f, tween(FADE_IN_MS))
         }
+    }
+
+    // Same content, new values (a download tick, a song position, a stack's newest page count):
+    // draw them at once. Only a different item or state goes through the fade above.
+    LaunchedEffect(state) {
+        if (contentKey(shown) == key) shown = state
     }
 
     // Pop when a new item takes the island (not on every update, not while expanded).

@@ -56,6 +56,10 @@ data class WhenToShow(
     val hideInLandscape: Boolean = true,
     val showOnLockscreen: Boolean = true,
     val hideWhenShadeOpen: Boolean = true,
+    /** Notifications that left the island unopened stay as a small "missed" pile. */
+    val keepMissed: Boolean = true,
+    /** One app's notifications share one slot instead of one each. */
+    val stackByApp: Boolean = true,
 )
 
 enum class IslandGesture { TAP, SWIPE_DOWN, SWIPE_UP, SWIPE_LEFT, SWIPE_RIGHT, LONG_PRESS }

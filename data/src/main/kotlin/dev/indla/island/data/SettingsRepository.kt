@@ -49,6 +49,8 @@ class SettingsRepository @Inject constructor(
         val hideLandscape = booleanPreferencesKey("hide_landscape")
         val showLockscreen = booleanPreferencesKey("show_lockscreen")
         val hideShade = booleanPreferencesKey("hide_shade")
+        val keepMissed = booleanPreferencesKey("keep_missed")
+        val stackByApp = booleanPreferencesKey("stack_by_app")
         val autoHide = intPreferencesKey("auto_hide_seconds")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
         val disclosure = booleanPreferencesKey("a11y_disclosure_accepted")
@@ -84,6 +86,8 @@ class SettingsRepository @Inject constructor(
                 hideInLandscape = this[Keys.hideLandscape] ?: w.hideInLandscape,
                 showOnLockscreen = this[Keys.showLockscreen] ?: w.showOnLockscreen,
                 hideWhenShadeOpen = this[Keys.hideShade] ?: w.hideWhenShadeOpen,
+                keepMissed = this[Keys.keepMissed] ?: w.keepMissed,
+                stackByApp = this[Keys.stackByApp] ?: w.stackByApp,
             ),
             gestures = GestureMap(
                 compactTap = gesture("compact_tap", g.compactTap),
@@ -137,6 +141,8 @@ class SettingsRepository @Inject constructor(
         this[Keys.hideLandscape] = s.whenToShow.hideInLandscape
         this[Keys.showLockscreen] = s.whenToShow.showOnLockscreen
         this[Keys.hideShade] = s.whenToShow.hideWhenShadeOpen
+        this[Keys.keepMissed] = s.whenToShow.keepMissed
+        this[Keys.stackByApp] = s.whenToShow.stackByApp
         this[Keys.autoHide] = s.autoHideSeconds
         this[Keys.onboardingDone] = s.onboardingDone
         this[Keys.disclosure] = s.accessibilityDisclosureAccepted
