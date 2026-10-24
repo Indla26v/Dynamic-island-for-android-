@@ -55,6 +55,7 @@ import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Speaker
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Vibration
@@ -82,6 +83,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.indla.island.model.ActionRole
+import dev.indla.island.model.AudioKind
 import dev.indla.island.model.CallState
 import dev.indla.island.model.IslandAction
 import dev.indla.island.model.IslandItem
@@ -90,6 +92,10 @@ import dev.indla.island.model.IslandUiState
 import dev.indla.island.model.ItemKind
 import dev.indla.island.model.LiveContent
 import dev.indla.island.model.SystemEvent
+import dev.indla.island.ui.island.scenes.AudioScene
+import dev.indla.island.ui.island.scenes.SceneArgs
+import dev.indla.island.ui.island.scenes.SystemScene
+import dev.indla.island.ui.island.scenes.hasScene
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -317,6 +323,10 @@ private fun ExpandedContent(
     drawReplyHint: Boolean,
 ) {
     val pad = 18f
+    if (layout.isSlimGlance(state) && item.live is LiveContent.System) {
+        SlimGlance(item.live as LiveContent.System, layout, rect, accent)
+        return
+    }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(horizontal = pad.dp)) {
             Band(item, layout, rect, pad, accent)
@@ -779,7 +789,11 @@ private fun SystemBody(item: IslandItem, system: LiveContent.System, accent: Col
                 Text(system.label, color = color, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(8.dp))
-            SystemScene(system.event, system.level, color, Modifier.weight(1f).fillMaxHeight())
+            SystemScene(
+                system.event,
+                SceneArgs(system.level, color, system.label, system.device, face = system.level == FACE),
+                Modifier.weight(1f).fillMaxHeight(),
+            )
         }
         return
     }
@@ -809,12 +823,64 @@ private fun SystemBody(item: IslandItem, system: LiveContent.System, accent: Col
     }
 }
 
+/**
+ * A system glance as one long, slim bar level with the camera: what happened on the left of the
+ * camera, its scene on the right. The headphones show their name on the left and the device
+ * with its battery ring on the right.
+ */
+@Composable
+private fun SlimGlance(system: LiveContent.System, layout: IslandLayout, rect: IslandRect, accent: Color) {
+    val pad = 16f
+    val camera = layout.cameraOffsetIn(rect)
+    val gap = layout.cameraGap
+    val leftWidth = (camera - gap / 2 - pad).coerceAtLeast(0f)
+    val rightWidth = (rect.width - camera - gap / 2 - pad).coerceAtLeast(0f)
+    val color = systemColor(system.event, accent)
+    val headphones = system.event == SystemEvent.HEADPHONES_CONNECTED
+    Row(Modifier.fillMaxSize().padding(horizontal = pad.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.width(leftWidth.dp)) {
+            Text(
+                if (headphones) system.label else systemTitle(system.event),
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                if (headphones) "Connected" else system.label,
+                color = if (headphones) Secondary else color,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.width(gap.dp))
+        Row(Modifier.width(rightWidth.dp).height(IslandLayout.GLANCE_ROW.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (headphones) {
+                AudioScene(system.device, connected = true, Color.White, Modifier.weight(1f).fillMaxHeight())
+                system.level?.let {
+                    Spacer(Modifier.width(8.dp))
+                    BatteryRing(it, 36.dp)
+                }
+            } else {
+                SystemScene(
+                    system.event,
+                    SceneArgs(system.level, color, system.label, system.device, face = system.level == FACE),
+                    Modifier.weight(1f).fillMaxHeight(),
+                )
+            }
+        }
+    }
+}
+
 /** Like AirPods on iPhone: the pair, "Connected" over its name, and its battery in a ring. */
 @Composable
 private fun HeadphonesBody(system: LiveContent.System) {
     Row(Modifier.fillMaxWidth().height(IslandLayout.SYSTEM_ROW.dp), verticalAlignment = Alignment.CenterVertically) {
-        val nod = rememberShake()
-        Icon(headphonesIcon(system), null, tint = Color.White, modifier = Modifier.size(36.dp).graphicsLayer { rotationZ = 10f * nod })
+        // The device as itself: earbuds out of their case, headphones snapping together, a speaker pumping.
+        AudioScene(system.device, connected = true, Color.White, Modifier.size(56.dp, IslandLayout.SYSTEM_ROW.dp))
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text("Connected", color = Secondary, fontSize = 13.sp, maxLines = 1)
@@ -846,7 +912,11 @@ private fun batteryColor(level: Int) = when {
 }
 
 private fun headphonesIcon(system: LiveContent.System): ImageVector =
-    if (system.earbuds) Icons.Rounded.Earbuds else Icons.Rounded.Headphones
+    when (system.device) {
+        AudioKind.EARBUDS -> Icons.Rounded.Earbuds
+        AudioKind.SPEAKER -> Icons.Rounded.Speaker
+        else -> Icons.Rounded.Headphones
+    }
 
 @Composable
 private fun QuickActions(item: IslandItem, registry: HitRegistry?) {

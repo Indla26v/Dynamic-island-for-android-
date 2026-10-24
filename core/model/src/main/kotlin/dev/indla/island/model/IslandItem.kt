@@ -171,8 +171,8 @@ sealed interface LiveContent {
         val level: Int?,
         /** What to say: a percentage, a ringer mode, or the headphones' name. */
         val label: String,
-        /** Headphones that are earbuds (drawn as earbuds, not a headband). */
-        val earbuds: Boolean = false,
+        /** For headphone glances: what kind of audio device, so it's drawn as itself. */
+        val device: AudioKind = AudioKind.OTHER,
     ) : LiveContent {
         // A battery report arriving after the connection updates the card; it isn't a new event.
         override val stableKey get() = if (event == SystemEvent.HEADPHONES_CONNECTED) listOf(event, label) else listOf(event, level, label)
@@ -180,6 +180,9 @@ sealed interface LiveContent {
 }
 
 enum class CallState { INCOMING, ONGOING, SCREENING }
+
+/** Earbuds come out of a case, over-ear headphones snap together, a speaker pumps. */
+enum class AudioKind { EARBUDS, HEADPHONES, SPEAKER, OTHER }
 
 enum class SystemEvent {
     CHARGING,

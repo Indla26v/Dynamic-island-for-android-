@@ -151,7 +151,7 @@ private fun PinDrop(color: Color, size: Dp) {
 @Composable
 private fun FocusMoon(color: Color, size: Dp) {
     val pop = rememberSpringIn(0.4f, 1f, 0.5f, Spring.StiffnessMediumLow)
-    val now by rememberTicker(true)
+    val now = rememberOnceClock(1_800)
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(size * 1.5f)) {
             for (k in 0..1) {
@@ -172,7 +172,7 @@ private fun FocusMoon(color: Color, size: Dp) {
 /** Bedtime: the icon rocks gently while little z's float up and fade. */
 @Composable
 private fun Sleepy(color: Color, size: Dp) {
-    val now by rememberTicker(true)
+    val now = rememberOnceClock(1_800)
     Box(Modifier.size(size)) {
         Icon(
             Icons.Rounded.Bedtime,
@@ -320,7 +320,7 @@ private fun Torch(on: Boolean, color: Color, size: Dp) {
         kotlinx.coroutines.delay(BREATHE_MS)
         breathing = false
     }
-    val now by rememberTicker(breathing)
+    val now = rememberOnceClock(1_600)
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(size * 1.6f)) {
             val breathe = if (breathing) 0.85f + 0.15f * sin((now % 1_600) / 1_600f * 2 * PI).toFloat() else 1f
@@ -361,7 +361,7 @@ private fun BatteryFill(level: Int, color: Color, size: Dp) {
 @Composable
 private fun MonsterFlare(color: Color, size: Dp) {
     val pop = rememberSpringIn(0.3f, 1f, 0.4f, Spring.StiffnessMedium)
-    val now by rememberTicker(true)
+    val now = rememberOnceClock(1_800)
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(size * 1.5f)) {
             val flicker = 0.75f + 0.25f * sin((now % 300) / 300f * 2 * PI).toFloat()
@@ -391,7 +391,7 @@ private fun MonsterFlare(color: Color, size: Dp) {
 @Composable
 private fun Horizon(color: Color, size: Dp, night: Boolean) {
     val p = rememberReveal(1_600)
-    val now by rememberTicker(night)
+    val now = rememberOnceClock(1_800)
     Box(Modifier.size(size)) {
         Canvas(Modifier.size(size)) {
             val horizon = this.size.height * 0.86f
@@ -605,5 +605,5 @@ internal fun systemTitle(event: SystemEvent): String = when (event) {
     SystemEvent.BEDTIME_ON, SystemEvent.BEDTIME_OFF -> "Bedtime"
     SystemEvent.DATA_ON, SystemEvent.DATA_OFF -> "Mobile data"
     SystemEvent.UNLOCKED -> "Unlocked"
-    SystemEvent.AUTH_FAILED -> "Not recognised"
+    SystemEvent.AUTH_FAILED -> "No match"
 }

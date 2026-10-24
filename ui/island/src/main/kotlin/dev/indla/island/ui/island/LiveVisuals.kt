@@ -198,6 +198,18 @@ fun rememberReveal(durationMs: Int = 900): Float {
     return reveal.value
 }
 
+/**
+ * Milliseconds 0..[durationMs], once, then still: for motions written against a clock that
+ * must not loop (glances play once and hold their last frame).
+ */
+@Composable
+fun rememberOnceClock(durationMs: Int): Long {
+    val frozen = LocalFrozenTime.current != null
+    val t = remember { Animatable(if (frozen) durationMs.toFloat() else 0f) }
+    LaunchedEffect(Unit) { t.animateTo(durationMs.toFloat(), tween(durationMs, easing = LinearEasing)) }
+    return t.value.toLong()
+}
+
 /** A spring from [from] to [to], once, after [delayMs]. */
 @Composable
 fun rememberSpringIn(from: Float, to: Float, dampingRatio: Float, stiffness: Float, delayMs: Long = 0): Float {

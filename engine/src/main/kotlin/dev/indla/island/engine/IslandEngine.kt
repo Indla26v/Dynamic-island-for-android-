@@ -915,10 +915,10 @@ class IslandEngine(
     }
 
     companion object {
-        const val EXPANDED_IDLE_MS = 6_000L
+        const val EXPANDED_IDLE_MS = 4_000L
         const val SYSTEM_EVENT_MS = 3_000L
         /** How long the headphones card stays open. */
-        const val SHOWCASE_MS = 6_000L
+        const val SHOWCASE_MS = 3_500L
         const val BRIEF_SHOWCASE_MS = 2_500L
         /** How long paused media stays before it leaves the island. */
         const val LIVE_LINGER_MS = 10_000L

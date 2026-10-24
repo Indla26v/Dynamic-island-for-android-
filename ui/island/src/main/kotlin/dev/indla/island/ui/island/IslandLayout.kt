@@ -111,8 +111,18 @@ data class IslandLayout(
         else -> max(BAND_MIN, hole.bottom - top + 4f)
     }
 
+    /**
+     * A system glance without buttons is a slim bar: its words left of the camera and its scene
+     * right of it, all in one row level with the camera, iOS style.
+     */
+    fun isSlimGlance(state: IslandUiState): Boolean {
+        val item = state.current ?: return false
+        return item.kind == ItemKind.SYSTEM && item.actions.isEmpty() && !state.quickActionsOpen
+    }
+
     fun expandedHeight(state: IslandUiState): Float {
         val item = state.current ?: return bandHeight + PADDING_BOTTOM
+        if (isSlimGlance(state)) return max(bandHeight, GLANCE_ROW) + 2 * GLANCE_PAD
         val body = when {
             state.quickActionsOpen -> AVATAR + GAP + BUTTON_ROW
             item.kind == ItemKind.CALL -> CALL_ROW
@@ -144,7 +154,10 @@ data class IslandLayout(
     companion object {
         const val EXPANDED_RADIUS = 34f
         /** Expanded width for system glances. */
-        const val GLANCE_WIDTH = 300f
+        const val GLANCE_WIDTH = 380f
+        /** The slim glance bar's content row, and the space above and below it. */
+        const val GLANCE_ROW = 44f
+        const val GLANCE_PAD = 7f
         const val EDGE = 6f
         const val BUBBLE_GAP = 6f
         const val BAND_MIN = 26f
@@ -161,7 +174,7 @@ data class IslandLayout(
         /** Round play/pause and stop buttons under a timer or recording. */
         const val CONTROL_ROW = 52f
         const val PROGRESS_BODY = 64f
-        const val SYSTEM_ROW = 52f
+        const val SYSTEM_ROW = 48f
 
         /**
          * @param cutout the top cutout's bounding rect, or null on devices without one.

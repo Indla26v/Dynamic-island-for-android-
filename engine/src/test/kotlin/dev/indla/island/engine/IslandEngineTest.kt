@@ -476,7 +476,7 @@ class IslandEngineTest {
 
     @Test
     fun headphones_openBriefly_batteryUpdatesInPlace_thenLeave() = test { h ->
-        val card = LiveContent.System(SystemEvent.HEADPHONES_CONNECTED, null, "Buds Pro", earbuds = true)
+        val card = LiveContent.System(SystemEvent.HEADPHONES_CONNECTED, null, "Buds Pro", device = dev.indla.island.model.AudioKind.EARBUDS)
         h.engine.onSystemEvent(card)
         assertEquals("shown open, like AirPods", IslandMode.EXPANDED, h.state.mode)
         advanceTimeBy(1_000); runCurrent()

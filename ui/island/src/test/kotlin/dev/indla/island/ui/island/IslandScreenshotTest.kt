@@ -118,6 +118,18 @@ class IslandScreenshotTest {
     @Test fun progressExpanded() = shot("progress_expanded", state(IslandMode.EXPANDED, download))
     @Test fun chargingCompact() = shot("system_charging_compact", state(IslandMode.COMPACT, charging))
     @Test fun splitThree() = shot("split_three", state(IslandMode.SPLIT, music, ongoing, download))
+    /** A system glance, opened: its scene's last frame (frozen time ends every scene). */
+    private fun glance(event: SystemEvent, label: String, level: Int? = null, device: dev.indla.island.model.AudioKind = dev.indla.island.model.AudioKind.OTHER) =
+        state(IslandMode.EXPANDED, item(ItemKind.SYSTEM, label, label, emptyList(), emptyList(), LiveContent.System(event, level, label, device), key = "sys"))
+
+    @Test fun sceneCharging() = shot("scene_charging", glance(SystemEvent.CHARGING, "62%", 62))
+    @Test fun sceneDark() = shot("scene_dark", glance(SystemEvent.DARK_MODE, "On"))
+    @Test fun sceneLight() = shot("scene_light", glance(SystemEvent.LIGHT_MODE, "On"))
+    @Test fun sceneAirplane() = shot("scene_airplane", glance(SystemEvent.AIRPLANE_ON, "On"))
+    @Test fun sceneDnd() = shot("scene_dnd", glance(SystemEvent.DND_ON, "Priority only"))
+    @Test fun sceneUnlock() = shot("scene_unlock", glance(SystemEvent.UNLOCKED, "Fingerprint", 0))
+    @Test fun sceneSpeaker() = shot("scene_speaker", glance(SystemEvent.HEADPHONES_DISCONNECTED, "Island Boom", device = dev.indla.island.model.AudioKind.SPEAKER))
+
     @Test fun hiddenByAndroid() = shot(
         "hidden_by_android",
         state(IslandMode.EXPANDED, item(ItemKind.HIDDEN_BY_ANDROID, "Messages", "Hidden by Android", listOf(MessageLine(null, "Hidden by Android")), emptyList())),

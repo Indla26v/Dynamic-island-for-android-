@@ -11,6 +11,7 @@ import dev.indla.island.data.SettingsRepository
 import dev.indla.island.data.rules.AppRuleRepository
 import dev.indla.island.engine.IslandEngine
 import dev.indla.island.model.AppRule
+import dev.indla.island.model.AudioKind
 import dev.indla.island.model.DefaultApps
 import dev.indla.island.model.GestureMap
 import dev.indla.island.model.IslandAppearance
@@ -129,7 +130,8 @@ class SettingsViewModel @Inject constructor(
 
     /** The headphones card as a pair would raise it: connected first, battery a moment later. */
     fun tryEarbuds() {
-        val card = LiveContent.System(SystemEvent.HEADPHONES_CONNECTED, null, "Island Buds Pro", earbuds = true)
+        val (name, kind) = DEMO_AUDIO[demoAudio++ % DEMO_AUDIO.size]
+        val card = LiveContent.System(SystemEvent.HEADPHONES_CONNECTED, null, name, device = kind)
         engine.onSystemEvent(card)
         appScope.launch(Dispatchers.Main) {
             delay(900)
@@ -186,5 +188,16 @@ class SettingsViewModel @Inject constructor(
     override fun onCleared() {
         engine.setPositionEditing(false)
         engine.previewSize(null)
+    }
+
+    private var demoAudio = 0
+
+    private companion object {
+        /** Each tap on the Earbuds chip shows the next kind of audio device. */
+        val DEMO_AUDIO = listOf(
+            "Island Buds Pro" to AudioKind.EARBUDS,
+            "Island Studio Max" to AudioKind.HEADPHONES,
+            "Island Boom Speaker" to AudioKind.SPEAKER,
+        )
     }
 }

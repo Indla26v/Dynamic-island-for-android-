@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothClass
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
@@ -16,6 +17,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
+import dev.indla.island.model.AudioKind
 import dev.indla.island.model.LiveContent
 import dev.indla.island.model.SystemEvent
 
@@ -71,7 +73,9 @@ internal class HeadphoneSignal(private val context: Context, private val emit: E
         override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>) {
             removed.filter { it.isSink && it.type in HEADPHONES && known.remove(it.id) }.forEach {
                 recent.remove(it.address)
-                emit(LiveContent.System(SystemEvent.HEADPHONES_DISCONNECTED, null, bluetooth(it)?.let(::btName) ?: name(it)))
+                val bt = bluetooth(it)
+                val name = bt?.let(::btName) ?: name(it)
+                emit(LiveContent.System(SystemEvent.HEADPHONES_DISCONNECTED, null, name, device = kindOf(it, bt, name)))
             }
         }
     }
@@ -109,9 +113,38 @@ internal class HeadphoneSignal(private val context: Context, private val emit: E
     private fun connected(device: AudioDeviceInfo): LiveContent.System {
         val bt = bluetooth(device)
         val name = bt?.let(::btName) ?: name(device)
-        val card = LiveContent.System(SystemEvent.HEADPHONES_CONNECTED, bt?.let(::btBattery), name, earbuds = EARBUDS.containsMatchIn(name))
+        val card = LiveContent.System(SystemEvent.HEADPHONES_CONNECTED, bt?.let(::btBattery), name, device = kindOf(device, bt, name))
         if (bt != null) recent[device.address] = card
         return card
+    }
+
+    /**
+     * Earbuds, over-ear headphones or a speaker: the Bluetooth device class says it best, the
+     * name settles what the class leaves open (a "headset" can be either), and wired ones are
+     * headphones.
+     */
+    @SuppressLint("MissingPermission") // bluetoothClass is only read for a device bluetooth() returned
+    private fun kindOf(device: AudioDeviceInfo, bt: BluetoothDevice?, name: String): AudioKind {
+        val cls = bt?.let { runCatching { it.bluetoothClass?.deviceClass }.getOrNull() }
+        val byClass = when (cls) {
+            BluetoothClass.Device.AUDIO_VIDEO_LOUDSPEAKER,
+            BluetoothClass.Device.AUDIO_VIDEO_PORTABLE_AUDIO,
+            BluetoothClass.Device.AUDIO_VIDEO_HIFI_AUDIO -> AudioKind.SPEAKER
+            BluetoothClass.Device.AUDIO_VIDEO_HEADPHONES -> AudioKind.HEADPHONES
+            BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO -> return AudioKind.OTHER
+            else -> null
+        }
+        val byName = when {
+            SPEAKER_NAMES.containsMatchIn(name) -> AudioKind.SPEAKER
+            EARBUD_NAMES.containsMatchIn(name) -> AudioKind.EARBUDS
+            HEADPHONE_NAMES.containsMatchIn(name) -> AudioKind.HEADPHONES
+            else -> null
+        }
+        return byClass ?: byName ?: when (device.type) {
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> AudioKind.HEADPHONES
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLE_HEADSET -> AudioKind.EARBUDS
+            else -> AudioKind.OTHER
+        }
     }
 
     private fun canUseBluetooth() = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
@@ -140,7 +173,9 @@ internal class HeadphoneSignal(private val context: Context, private val emit: E
     private companion object {
         const val ACTION_BATTERY_LEVEL_CHANGED = "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED"
         const val EXTRA_BATTERY_LEVEL = "android.bluetooth.device.extra.BATTERY_LEVEL"
-        val EARBUDS = Regex("(?i)buds|pods|dots|tws|earbud|freebuds|nord|liberty")
+        val SPEAKER_NAMES = Regex("""(?i)speaker|boom|flip|charge \d|soundlink|soundcore motion|party|xtreme|go \d|clip \d|soundbar|home ?pod|echo""")
+        val EARBUD_NAMES = Regex("(?i)buds|pods|dots|tws|earbud|freebuds|nord|liberty|wf-|airpods")
+        val HEADPHONE_NAMES = Regex("""(?i)headphone|wh-|qc ?\d|quietcomfort|max|studio|over|momentum|tune \d{3}""")
         val BLUETOOTH = setOf(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLE_HEADSET)
         val HEADPHONES = setOf(
             AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
