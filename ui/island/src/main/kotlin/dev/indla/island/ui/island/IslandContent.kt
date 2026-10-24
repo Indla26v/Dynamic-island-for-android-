@@ -45,6 +45,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Earbuds
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.FlashlightOff
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Lock
@@ -60,6 +61,7 @@ import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -228,6 +230,8 @@ private fun RowScope.CompactTrailing(item: IslandItem, accent: Color, minimal: B
             val color = systemColor(live.event, accent)
             if (live.event == SystemEvent.CLIPBOARD) {
                 GlanceText("Copied", color)
+            } else if (live.event == SystemEvent.UNLOCKED || live.event == SystemEvent.AUTH_FAILED) {
+                GlanceText(if (live.event == SystemEvent.UNLOCKED) "Unlocked" else "Retry", color)
             } else if (live.event == SystemEvent.RINGER_SILENT || live.event == SystemEvent.RINGER_VIBRATE || live.event == SystemEvent.RINGER_NORMAL) {
                 GlanceText(systemTitle(live.event).removeSuffix(" mode"), color)
             } else if (live.event == SystemEvent.SAVER_ON || live.event == SystemEvent.SAVER_OFF) {
@@ -244,7 +248,16 @@ private fun RowScope.CompactTrailing(item: IslandItem, accent: Color, minimal: B
         }
         null -> {
             val stack = item.stack
+            // Who on the left (the contact's photo), which app on the right (its logo).
+            val logoRight = item.avatarKey != null && !isIslandPackage(item.packageName) && !item.isHidden
             when {
+                logoRight -> {
+                    if (stack != null) {
+                        CountBadge(stack.size, accent, stack.missed)
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    AppIconImage(item.packageName, if (minimal) 18.dp else 22.dp)
+                }
                 minimal -> Box(Modifier.size(8.dp).clip(CircleShape).background(accent))
                 stack != null -> {
                     if (!stack.missed) {
@@ -313,7 +326,10 @@ private fun ExpandedContent(
                 item.live is LiveContent.Call -> CallBody(item, item.live as LiveContent.Call, registry)
                 item.live is LiveContent.Media -> MediaBody(item, item.live as LiveContent.Media, accent, registry)
                 item.live is LiveContent.Progress -> ProgressBody(item, item.live as LiveContent.Progress, accent, registry)
-                item.live is LiveContent.System -> SystemBody(item.live as LiveContent.System, accent)
+                // Expanded glances keep moving until they collapse.
+                item.live is LiveContent.System -> CompositionLocalProvider(LocalLoopMotion provides true) {
+                    SystemBody(item, item.live as LiveContent.System, accent, registry)
+                }
                 item.live is LiveContent.Timer -> TimerBody(item, item.live as LiveContent.Timer, registry)
                 else -> NotificationBody(item, state.replyOpen, registry, drawReplyHint)
             }
@@ -753,7 +769,7 @@ private fun TurnArrow(item: IslandItem, size: Dp) {
 
 /** Charging, ringer or headphones, larger: a ring around the icon and a label. */
 @Composable
-private fun SystemBody(system: LiveContent.System, accent: Color) {
+private fun SystemBody(item: IslandItem, system: LiveContent.System, accent: Color, registry: HitRegistry?) {
     if (system.event == SystemEvent.HEADPHONES_CONNECTED) {
         HeadphonesBody(system)
         return
@@ -772,6 +788,15 @@ private fun SystemBody(system: LiveContent.System, accent: Color) {
         Column {
             Text(systemTitle(system.event), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             Text(system.label, color = Secondary, fontSize = 14.sp, maxLines = if (system.event == SystemEvent.CLIPBOARD) 2 else 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+    // The flashlight's own off switch.
+    if (item.actions.isNotEmpty()) {
+        Spacer(Modifier.height(IslandLayout.GAP.dp))
+        ButtonRow {
+            item.actions.forEach { action ->
+                PillButton(action.title, Icons.Rounded.FlashlightOff, registry, HitRegistry.action(action.index), Modifier.weight(1f), fill = Color(0xFF3A3A3C))
+            }
         }
     }
 }

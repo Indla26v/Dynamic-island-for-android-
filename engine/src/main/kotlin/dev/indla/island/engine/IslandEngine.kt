@@ -6,6 +6,7 @@ import dev.indla.island.model.DefaultApps
 import dev.indla.island.model.Environment
 import dev.indla.island.model.GestureAction
 import dev.indla.island.model.Importance
+import dev.indla.island.model.IslandAction
 import dev.indla.island.model.IslandGesture
 import dev.indla.island.model.IslandItem
 import dev.indla.island.model.IslandMode
@@ -101,6 +102,8 @@ class IslandEngine(
     /** Size from the Look screen's slider while it is dragged, before it is saved. */
     private var previewScale: Float? = null
     private var timer: Job? = null
+    /** Digital Wellbeing's "Bedtime mode is on" notification, while it's up. */
+    private var bedtimeKey: String? = null
 
     /** key -> content hash of everything posted and not yet removed; bounded. */
     private val seen = object : LinkedHashMap<String, Int>(64, 0.75f, true) {
@@ -137,6 +140,14 @@ class IslandEngine(
     // ---- Notification source -----------------------------------------------------------------
 
     fun onPosted(raw: RawNotification) {
+        if (isBedtime(raw)) {
+            // Digital Wellbeing says bedtime started (often on its schedule): a glance, not a card.
+            if (bedtimeKey != raw.key) {
+                bedtimeKey = raw.key
+                onSystemEvent(LiveContent.System(SystemEvent.BEDTIME_ON, null, raw.text?.trim()?.takeIf { it.isNotEmpty() } ?: "On"))
+            }
+            return
+        }
         if (!rulesLoaded) {
             if (pendingPosts.size >= MAX_PENDING) pendingPosts.removeFirst()
             pendingPosts.addLast(raw)
@@ -247,6 +258,11 @@ class IslandEngine(
     }
 
     fun onRemoved(key: String) {
+        if (key == bedtimeKey) {
+            bedtimeKey = null
+            onSystemEvent(LiveContent.System(SystemEvent.BEDTIME_OFF, null, "Off"))
+            return
+        }
         seen.remove(key)
         dismissedLive.remove(key)
         parked.removeAll { it.item.key == key }
@@ -293,7 +309,7 @@ class IslandEngine(
         upsertLive(withAccent(item, explicit, snapshot.appAccentArgb), snapshot.isSelfTest, pop = true)
     }
 
-    /** Charging, battery low, ringer mode or headphones: a brief compact glance. */
+    /** A phone state change (charging, ringer, modes, headphones, unlock): a brief glance. */
     fun onSystemEvent(event: LiveContent.System) {
         // Mode switches mostly happen in quick settings, so these glances show over the shade.
         if (!settings.enabled || !settings.live.allows(event.event) || !isVisible(overShade = true)) return
@@ -306,12 +322,16 @@ class IslandEngine(
             title = event.label,
             glance = event.label,
             lines = emptyList(),
-            actions = emptyList(),
             avatarKey = null,
             postTime = clock(),
             groupKey = null,
             isGroupSummary = false,
             live = event,
+            actions = if (event.event == SystemEvent.FLASHLIGHT_ON) {
+                listOf(IslandAction(ActionRole.TORCH_OFF_INDEX, "Turn off", false, ActionRole.STOP))
+            } else {
+                emptyList()
+            },
         )
         val existing = active.indexOfFirst { it.item.key == key }
         // The same event with news (a pair's battery arriving after it connected): update the
@@ -324,8 +344,11 @@ class IslandEngine(
         if (existing >= 0) removeAt(existing)
         // Headphones connecting open up briefly to show the pair and its battery, then leave.
         // Opened by default: the pair and its battery, the plane flying in, the moon swinging in.
-        val showcase = true
-        insert(Active(item, clock() + if (showcase) SHOWCASE_MS else SYSTEM_EVENT_MS, selfTest = false), autoExpand = showcase && !busy())
+        // Unlocking happens many times a day: that one stays a small glance.
+        val showcase = event.event != SystemEvent.UNLOCKED && event.event != SystemEvent.AUTH_FAILED
+        // The flashlight stays on the island, with a button to turn it off, until it's off.
+        val expires = if (event.event == SystemEvent.FLASHLIGHT_ON) FOREVER else clock() + if (showcase) SHOWCASE_MS else SYSTEM_EVENT_MS
+        insert(Active(item, expires, selfTest = false), autoExpand = showcase && !busy())
         if (showcase && expanded) expandedDeadline = clock() + SHOWCASE_MS
         publish()
     }
@@ -839,7 +862,8 @@ class IslandEngine(
         }
         _state.value = IslandUiState(
             mode = mode,
-            visible = isVisible(overShade = current()?.kind == ItemKind.SYSTEM),
+            // A glance shows over the shade; a lasting one (the torch) only while it's opened up.
+            visible = isVisible(overShade = current()?.kind == ItemKind.SYSTEM && (expanded || active.getOrNull(currentIndex)?.persistent == false)),
             items = active.map { lockRedacted(withStack(it)) },
             currentIndex = currentIndex,
             replyOpen = replyOpen,
@@ -890,10 +914,10 @@ class IslandEngine(
     }
 
     companion object {
-        const val EXPANDED_IDLE_MS = 8_000L
+        const val EXPANDED_IDLE_MS = 6_000L
         const val SYSTEM_EVENT_MS = 3_000L
         /** How long the headphones card stays open. */
-        const val SHOWCASE_MS = 3_500L
+        const val SHOWCASE_MS = 6_000L
         /** How long paused media stays before it leaves the island. */
         const val LIVE_LINGER_MS = 10_000L
         const val MAX_ITEMS = 5
@@ -908,6 +932,12 @@ class IslandEngine(
 
         fun mediaKey(packageName: String) = "media:$packageName"
 
+        private const val WELLBEING = "com.google.android.apps.wellbeing"
+        private val BEDTIME = Regex("(?i)bedtime")
+
+        private fun isBedtime(raw: RawNotification) = raw.packageName == WELLBEING && raw.ongoing &&
+            listOfNotNull(raw.title, raw.text).any { BEDTIME.containsMatchIn(it) }
+
         private fun systemGroup(event: SystemEvent) = when (event) {
             SystemEvent.CHARGING, SystemEvent.UNPLUGGED, SystemEvent.BATTERY_LOW -> "battery"
             SystemEvent.RINGER_NORMAL, SystemEvent.RINGER_VIBRATE, SystemEvent.RINGER_SILENT -> "ringer"
@@ -919,6 +949,11 @@ class IslandEngine(
             SystemEvent.DARK_MODE, SystemEvent.LIGHT_MODE -> "theme"
             SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_DISCONNECTED -> "wifi"
             SystemEvent.CLIPBOARD -> "clipboard"
+            SystemEvent.LOCATION_ON, SystemEvent.LOCATION_OFF -> "location"
+            SystemEvent.DND_ON, SystemEvent.DND_OFF -> "dnd"
+            SystemEvent.BEDTIME_ON, SystemEvent.BEDTIME_OFF -> "bedtime"
+            SystemEvent.DATA_ON, SystemEvent.DATA_OFF -> "data"
+            SystemEvent.UNLOCKED, SystemEvent.AUTH_FAILED -> "auth"
         }
     }
 }

@@ -99,6 +99,8 @@ enum class ActionRole {
         /** Play/pause and stop buttons drawn inside an app's custom notification view. */
         const val CUSTOM_TOGGLE_INDEX = -4
         const val CUSTOM_STOP_INDEX = -5
+        /** The island's own button that turns the flashlight off. */
+        const val TORCH_OFF_INDEX = -6
     }
 }
 
@@ -202,6 +204,18 @@ enum class SystemEvent {
     WIFI_CONNECTED,
     WIFI_DISCONNECTED,
     CLIPBOARD,
+    LOCATION_ON,
+    LOCATION_OFF,
+    DND_ON,
+    DND_OFF,
+    /** Digital Wellbeing's bedtime mode, including when its schedule turns it on. */
+    BEDTIME_ON,
+    BEDTIME_OFF,
+    DATA_ON,
+    DATA_OFF,
+    /** Unlocked; the label says how ("Face" / "Fingerprint") when known. */
+    UNLOCKED,
+    AUTH_FAILED,
 }
 
 /** A media session as the listener sees it; the engine turns it into a MEDIA item. */

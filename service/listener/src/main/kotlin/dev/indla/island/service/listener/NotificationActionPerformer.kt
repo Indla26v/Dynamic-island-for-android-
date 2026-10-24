@@ -72,6 +72,10 @@ class NotificationActionPerformer @Inject constructor(
     }
 
     override fun invokeAction(key: String, actionIndex: Int) {
+        if (actionIndex == ActionRole.TORCH_OFF_INDEX) {
+            torchOff()
+            return
+        }
         val sbn = posted[key] ?: return
         if (actionIndex == ActionRole.CUSTOM_TOGGLE_INDEX || actionIndex == ActionRole.CUSTOM_STOP_INDEX) {
             val control = if (actionIndex == ActionRole.CUSTOM_TOGGLE_INDEX) CustomViewReader.Control.TOGGLE else CustomViewReader.Control.STOP
@@ -106,6 +110,14 @@ class NotificationActionPerformer @Inject constructor(
         }
         val action = action(key, actionIndex) ?: return
         send(action.actionIntent)
+    }
+
+    /** Every camera's torch off; needs no camera permission. */
+    private fun torchOff() {
+        val camera = context.getSystemService(android.hardware.camera2.CameraManager::class.java) ?: return
+        runCatching { camera.cameraIdList }.getOrDefault(emptyArray()).forEach { id ->
+            runCatching { camera.setTorchMode(id, false) }
+        }
     }
 
     override fun reply(key: String, actionIndex: Int, text: String) {

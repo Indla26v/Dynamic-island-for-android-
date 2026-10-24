@@ -46,6 +46,11 @@ data class LiveSettings(
     val wifi: Boolean = true,
     /** "Copied" with what was copied: reads the selected text when Copy is tapped. */
     val clipboard: Boolean = true,
+    val location: Boolean = true,
+    val dnd: Boolean = true,
+    val bedtime: Boolean = true,
+    val mobileData: Boolean = true,
+    val unlock: Boolean = true,
 ) {
     fun allows(event: SystemEvent): Boolean = when (event) {
         SystemEvent.CHARGING, SystemEvent.UNPLUGGED -> charging
@@ -59,6 +64,11 @@ data class LiveSettings(
         SystemEvent.DARK_MODE, SystemEvent.LIGHT_MODE -> theme
         SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_DISCONNECTED -> wifi
         SystemEvent.CLIPBOARD -> clipboard
+        SystemEvent.LOCATION_ON, SystemEvent.LOCATION_OFF -> location
+        SystemEvent.DND_ON, SystemEvent.DND_OFF -> dnd
+        SystemEvent.BEDTIME_ON, SystemEvent.BEDTIME_OFF -> bedtime
+        SystemEvent.DATA_ON, SystemEvent.DATA_OFF -> mobileData
+        SystemEvent.UNLOCKED, SystemEvent.AUTH_FAILED -> unlock
     }
 }
 

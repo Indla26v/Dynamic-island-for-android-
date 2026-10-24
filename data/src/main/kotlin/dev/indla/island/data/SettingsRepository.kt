@@ -118,6 +118,11 @@ class SettingsRepository @Inject constructor(
                 theme = this[Keys.live("theme")] ?: d.live.theme,
                 wifi = this[Keys.live("wifi")] ?: d.live.wifi,
                 clipboard = this[Keys.live("clipboard")] ?: d.live.clipboard,
+                location = this[Keys.live("location")] ?: d.live.location,
+                dnd = this[Keys.live("dnd")] ?: d.live.dnd,
+                bedtime = this[Keys.live("bedtime")] ?: d.live.bedtime,
+                mobileData = this[Keys.live("mobile_data")] ?: d.live.mobileData,
+                unlock = this[Keys.live("unlock")] ?: d.live.unlock,
             ),
             onboardingDone = this[Keys.onboardingDone] ?: d.onboardingDone,
             accessibilityDisclosureAccepted = this[Keys.disclosure] ?: d.accessibilityDisclosureAccepted,
@@ -150,6 +155,11 @@ class SettingsRepository @Inject constructor(
         this[Keys.live("theme")] = s.live.theme
         this[Keys.live("wifi")] = s.live.wifi
         this[Keys.live("clipboard")] = s.live.clipboard
+        this[Keys.live("location")] = s.live.location
+        this[Keys.live("dnd")] = s.live.dnd
+        this[Keys.live("bedtime")] = s.live.bedtime
+        this[Keys.live("mobile_data")] = s.live.mobileData
+        this[Keys.live("unlock")] = s.live.unlock
         this[Keys.hideForeground] = s.whenToShow.hideInForegroundApp
         this[Keys.hideFullscreen] = s.whenToShow.hideInFullscreen
         this[Keys.hideLandscape] = s.whenToShow.hideInLandscape

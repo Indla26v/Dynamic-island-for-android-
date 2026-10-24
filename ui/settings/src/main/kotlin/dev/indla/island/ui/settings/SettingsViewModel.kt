@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.indla.island.data.ApplicationScope
 import dev.indla.island.data.OverlayKeeper
 import dev.indla.island.data.SettingsRepository
 import dev.indla.island.data.rules.AppRuleRepository
@@ -26,6 +27,8 @@ import dev.indla.island.service.listener.selftest.TestNotificationPoster
 import dev.indla.island.service.overlay.FrameStats
 import dev.indla.island.service.overlay.OverlayFrameStats
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -44,6 +47,8 @@ class SettingsViewModel @Inject constructor(
     private val installedApps: InstalledApps,
     private val recorder: FixtureRecorder,
     private val live: TestLiveActivities,
+    /** Demos outlive this screen: leaving the app to watch them must not cancel them. */
+    @ApplicationScope private val appScope: CoroutineScope,
 ) : ViewModel() {
     /** Null until DataStore has been read, so onboarding never flashes for returning users. */
     val settings: StateFlow<IslandSettings?> = settingsRepo.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -91,7 +96,7 @@ class SettingsViewModel @Inject constructor(
 
     /** Every mode glance in turn, as the phone would raise them. */
     fun tryModes() {
-        viewModelScope.launch {
+        appScope.launch(Dispatchers.Main) {
             listOf(
                 LiveContent.System(SystemEvent.RINGER_SILENT, null, "Sounds off"),
                 LiveContent.System(SystemEvent.RINGER_VIBRATE, null, "Vibrate only"),
@@ -103,6 +108,14 @@ class SettingsViewModel @Inject constructor(
                 LiveContent.System(SystemEvent.DARK_MODE, null, "On"),
                 LiveContent.System(SystemEvent.WIFI_CONNECTED, null, "Connected"),
                 LiveContent.System(SystemEvent.CLIPBOARD, null, "Meet at 7, Café Coffee Day, 100 Ft Rd"),
+                LiveContent.System(SystemEvent.LOCATION_ON, null, "On"),
+                LiveContent.System(SystemEvent.DND_ON, null, "Priority only"),
+                LiveContent.System(SystemEvent.BEDTIME_ON, null, "Until 7:00 AM"),
+                LiveContent.System(SystemEvent.DATA_ON, null, "On"),
+                LiveContent.System(SystemEvent.AUTH_FAILED, 0, "Fingerprint not recognised"),
+                LiveContent.System(SystemEvent.UNLOCKED, 0, "Fingerprint"),
+                // The demo torch was never lit, so it says off itself.
+                LiveContent.System(SystemEvent.FLASHLIGHT_OFF, null, "Off"),
             ).forEach {
                 engine.onSystemEvent(it)
                 delay(2_600)
@@ -114,7 +127,7 @@ class SettingsViewModel @Inject constructor(
     fun tryEarbuds() {
         val card = LiveContent.System(SystemEvent.HEADPHONES_CONNECTED, null, "Island Buds Pro", earbuds = true)
         engine.onSystemEvent(card)
-        viewModelScope.launch {
+        appScope.launch(Dispatchers.Main) {
             delay(900)
             engine.onSystemEvent(card.copy(level = 75))
         }

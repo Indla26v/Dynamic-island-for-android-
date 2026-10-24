@@ -24,19 +24,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AirplanemodeActive
 import androidx.compose.material.icons.rounded.BatteryAlert
 import androidx.compose.material.icons.rounded.BatterySaver
+import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.DoNotDisturbOn
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.FlashlightOn
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SelectAll
+import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.CircularProgressIndicator
@@ -184,6 +189,11 @@ private fun LiveCard(live: LiveSettings, onLive: ((LiveSettings) -> LiveSettings
             GlassChip("Dark / light", { onLive { it.copy(theme = !it.theme) } }, Icons.Rounded.DarkMode, live.theme)
             GlassChip("Wi-Fi", { onLive { it.copy(wifi = !it.wifi) } }, Icons.Rounded.Wifi, live.wifi)
             GlassChip("Clipboard", { onLive { it.copy(clipboard = !it.clipboard) } }, Icons.Rounded.ContentPaste, live.clipboard)
+            GlassChip("Location", { onLive { it.copy(location = !it.location) } }, Icons.Rounded.LocationOn, live.location)
+            GlassChip("Do not disturb", { onLive { it.copy(dnd = !it.dnd) } }, Icons.Rounded.DoNotDisturbOn, live.dnd)
+            GlassChip("Bedtime", { onLive { it.copy(bedtime = !it.bedtime) } }, Icons.Rounded.Bedtime, live.bedtime)
+            GlassChip("Mobile data", { onLive { it.copy(mobileData = !it.mobileData) } }, Icons.Rounded.SwapVert, live.mobileData)
+            GlassChip("Face / fingerprint", { onLive { it.copy(unlock = !it.unlock) } }, Icons.Rounded.Fingerprint, live.unlock)
         }
     }
 }

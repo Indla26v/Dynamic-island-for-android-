@@ -58,14 +58,32 @@ data class IslandLayout(
     fun rectFor(state: IslandUiState): IslandRect = when (state.mode) {
         IslandMode.REST -> if (state.showsRestPill) rest() else hole
         IslandMode.COMPACT, IslandMode.SPLIT -> compact()
-        IslandMode.EXPANDED -> expanded(expandedHeight(state))
+        IslandMode.EXPANDED -> expandedRect(state)
     }
+
+    /** The expanded card for [state]: as tall as its content and as wide as it needs. */
+    fun expandedRect(state: IslandUiState) = expanded(expandedHeight(state), expandedWidthFor(state))
 
     fun rest() = IslandRect(clampLeft(restWidth), top, restWidth, restHeight, radius(restHeight))
 
     fun compact() = IslandRect(clampLeft(compactWidth), top, compactWidth, restHeight, radius(restHeight))
 
-    fun expanded(height: Float) = IslandRect(clampLeft(expandedWidth), top, expandedWidth, height, EXPANDED_RADIUS)
+    fun expanded(height: Float, width: Float = expandedWidth) = IslandRect(clampLeft(width), top, width, height, EXPANDED_RADIUS)
+
+    /**
+     * Size follows content: a glance (a mode, the headphones, an unlock) gets a narrower card,
+     * centred on the camera so it grows out of it evenly on both sides; messages, music and
+     * calls use the full width.
+     */
+    fun expandedWidthFor(state: IslandUiState): Float {
+        val item = state.current ?: return expandedWidth
+        val width = when {
+            state.quickActionsOpen || state.replyOpen -> expandedWidth
+            item.kind == ItemKind.SYSTEM -> GLANCE_WIDTH
+            else -> expandedWidth
+        }
+        return width.coerceAtMost(expandedWidth)
+    }
 
     /** Bubble right of the pill (the second item); falls back to the left when there's no room. */
     fun bubble(): IslandRect {
@@ -100,7 +118,7 @@ data class IslandLayout(
             item.kind == ItemKind.CALL -> CALL_ROW
             item.kind == ItemKind.TIMER -> CALL_ROW + GAP + CONTROL_ROW
             item.kind == ItemKind.MEDIA -> MEDIA_ART + GAP + SCRUBBER + MEDIA_CONTROLS
-            item.kind == ItemKind.SYSTEM -> SYSTEM_ROW
+            item.kind == ItemKind.SYSTEM -> SYSTEM_ROW + actionsHeight(item)
             item.kind == ItemKind.PROGRESS -> PROGRESS_BODY + actionsHeight(item)
             state.replyOpen -> notificationBody(minOf(item.lines.size, 1)) + GAP + REPLY_ROW
             else -> notificationBody(item.lines.size.coerceAtMost(3)) + actionsHeight(item)
@@ -125,6 +143,8 @@ data class IslandLayout(
 
     companion object {
         const val EXPANDED_RADIUS = 34f
+        /** Expanded width for system glances. */
+        const val GLANCE_WIDTH = 300f
         const val EDGE = 6f
         const val BUBBLE_GAP = 6f
         const val BAND_MIN = 26f

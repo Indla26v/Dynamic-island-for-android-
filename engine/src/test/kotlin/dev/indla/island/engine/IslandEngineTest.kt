@@ -498,6 +498,37 @@ class IslandEngineTest {
     }
 
     @Test
+    fun flashlight_staysUntilOff_withATurnOffButton() = test { h ->
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.FLASHLIGHT_ON, null, "On"))
+        assertEquals(IslandMode.EXPANDED, h.state.mode)
+        assertEquals(listOf(dev.indla.island.model.ActionRole.TORCH_OFF_INDEX), h.state.current?.actions?.map { it.index })
+        advanceTimeBy(60_000); runCurrent()
+        assertEquals("still lit, still on the island", SystemEvent.FLASHLIGHT_ON, (h.state.current?.live as LiveContent.System).event)
+        h.engine.onActionTapped(dev.indla.island.model.ActionRole.TORCH_OFF_INDEX)
+        assertEquals(listOf("action:system:flashlight:-6"), h.effects.calls)
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.FLASHLIGHT_OFF, null, "Off"))
+        advanceTimeBy(IslandEngine.SHOWCASE_MS + 100); runCurrent()
+        assertEquals(IslandMode.REST, h.state.mode)
+    }
+
+    @Test
+    fun wellbeingBedtime_becomesAGlance_notACard() = test { h ->
+        val bedtime = Fixtures.whatsAppDirect().copy(
+            key = "0|com.google.android.apps.wellbeing|1|null|10100",
+            packageName = "com.google.android.apps.wellbeing",
+            appLabel = "Digital Wellbeing",
+            ongoing = true,
+            title = "Bedtime mode is on",
+            text = "Until 7:00 AM",
+            messages = emptyList(),
+        )
+        h.engine.onPosted(bedtime)
+        assertEquals(SystemEvent.BEDTIME_ON, (h.state.current?.live as LiveContent.System).event)
+        h.engine.onRemoved(bedtime.key)
+        assertEquals(SystemEvent.BEDTIME_OFF, (h.state.current?.live as LiveContent.System).event)
+    }
+
+    @Test
     fun timerPause_keepsTheCardOpen() = test { h ->
         h.engine.onPosted(Fixtures.clockTimer())
         h.engine.onGesture(IslandGesture.TAP)
