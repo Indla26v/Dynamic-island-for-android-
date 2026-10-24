@@ -148,48 +148,7 @@ private fun RowScope.CompactLeading(item: IslandItem, size: Dp, accent: Color) {
         is LiveContent.System -> Icon(systemIcon(live.event), null, tint = systemColor(live.event, accent), modifier = Modifier.size(size * 0.85f))
         is LiveContent.Progress -> ItemIcon(item, size)
         is LiveContent.Timer -> Icon(Icons.Rounded.Timer, null, tint = TimerOrange, modifier = Modifier.size(size * 0.85f))
-        null -> StackedAvatar(item, size)
-    }
-}
-
-/**
- * A stack shows what's behind the front page: for one app, a disc peeking out; for the missed
- * pile, the other apps' icons fanned out behind the newest.
- */
-@Composable
-private fun StackedAvatar(item: IslandItem, size: Dp) {
-    val stack = item.stack
-    if (stack == null) {
-        ItemAvatar(item, item.avatarKey, size)
-        return
-    }
-    val peek = size * 0.42f
-    val behind = if (stack.missed) stack.otherPackages.take(2) else emptyList()
-    val layers = if (behind.isNotEmpty()) behind.size else 1
-    Box(Modifier.width(size + peek * layers).height(size)) {
-        if (behind.isEmpty()) {
-            Box(
-                Modifier
-                    .offset(x = peek)
-                    .size(size)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.16f)),
-            )
-        } else {
-            behind.asReversed().forEachIndexed { i, pkg ->
-                val depth = behind.size - i
-                Box(
-                    Modifier
-                        .offset(x = peek * depth)
-                        .size(size)
-                        .clip(CircleShape)
-                        .background(Color(0xFF1C1C1E))
-                        .alpha(1f - 0.25f * depth),
-                    contentAlignment = Alignment.Center,
-                ) { AppIconImage(pkg, size * 0.78f) }
-            }
-        }
-        Box(Modifier.size(size).clip(CircleShape).background(Color.Black)) { ItemAvatar(item, item.avatarKey, size) }
+        null -> ItemAvatar(item, item.avatarKey, size)
     }
 }
 

@@ -54,6 +54,9 @@ private const val CONTENT_DELAY_MS = 80L
 private const val FADE_IN_MS = 170
 private const val SLIDE_DP = 28f
 
+/** The cards behind a stacked island: lighter the further back, so the layers read on black. */
+private val DeckColors = listOf(Color(0xFF3A3A3C), Color(0xFF242426))
+
 private val RectConverter = TwoWayConverter<IslandRect, AnimationVector4D>(
     convertToVector = { AnimationVector4D(it.left + it.width / 2, it.top, it.width, it.height) },
     convertFromVector = { v ->
@@ -176,6 +179,13 @@ fun IslandSurface(
     )
     val attached = layout.attachedToTop
     val edge = remember { GlassEdge() }
+    // A stack is a deck: up to two cards peek out under the island, one over the other.
+    val stackLayers = state.current?.stack?.takeIf { state.mode != IslandMode.REST }?.let { minOf(it.size - 1, 2) } ?: 0
+    val deck by animateFloatAsState(
+        stackLayers.toFloat(),
+        spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
+        label = "deck",
+    )
 
     Box(
         modifier.fillMaxSize().graphicsLayer {
@@ -196,6 +206,18 @@ fun IslandSurface(
             // the camera hole; the card becomes dark frosted glass with a lit edge.
             val glass = ((r.height - layout.restHeight) / 56f).coerceIn(0f, 1f)
             if (shapeAlpha <= 0.01f) return@Canvas
+            // Back to front, so each card sits over the one behind it.
+            for (i in 2 downTo 1) {
+                val reveal = (deck - (i - 1)).coerceIn(0f, 1f)
+                if (reveal <= 0f) continue
+                val inset = maxOf(r.width * 0.07f, 9f) * i
+                val drop = (if (glass > 0.5f) 7f else 4.5f) * i * reveal
+                drawIsland(
+                    IslandRect(r.left + inset, r.top + drop, r.width - 2 * inset, r.height, r.radius),
+                    attached,
+                    DeckColors[i - 1].copy(alpha = reveal * shapeAlpha),
+                )
+            }
             drawIsland(r, attached, Color.Black.copy(alpha = (1f - (1f - tint) * glass) * shapeAlpha))
             if (glass > 0.01f && appearance.glassCard) {
                 val px = r.toPx(this)
