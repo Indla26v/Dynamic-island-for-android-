@@ -104,6 +104,7 @@ class IslandAccessibilityService : AccessibilityService() {
     private var windowsJob: Job? = null
     private var blur: BlurWindow? = null
     private var systemEvents: SystemEventMonitor? = null
+    private val controls by lazy { ControlPress(this, scope) }
 
     override fun onServiceConnected() {
         windowManager = getSystemService(WindowManager::class.java)
@@ -407,7 +408,18 @@ class IslandAccessibilityService : AccessibilityService() {
                 id == HitRegistry.MEDIA_SEEK -> seek(point)
                 id == HitRegistry.QUICK_MUTE -> engine.onMuteApp()
                 id == HitRegistry.QUICK_DISMISS -> engine.onDismissCurrent()
-                id.startsWith(HitRegistry.OPEN_APP) -> engine.onOpenCurrent()
+                id.startsWith(HitRegistry.OPEN_APP) -> {
+                    // No controls offered to other apps: open it and press its own button.
+                    val target = state.current?.packageName
+                    val back = engine.environment.foregroundPackage
+                    engine.onOpenCurrent()
+                    val kind = when (id) {
+                        HitRegistry.OPEN_APP + ":toggle" -> ControlPress.Kind.TOGGLE
+                        HitRegistry.OPEN_APP + ":stop" -> ControlPress.Kind.STOP
+                        else -> null
+                    }
+                    if (target != null && kind != null) controls.press(target, kind, back)
+                }
                 else -> engine.onGesture(dev.indla.island.model.IslandGesture.TAP)
             }
         },
