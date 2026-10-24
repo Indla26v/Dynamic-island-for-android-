@@ -27,12 +27,29 @@ data class RawNotification(
     val messages: List<RawMessage> = emptyList(),
     val actions: List<RawAction> = emptyList(),
     val ranking: RawRanking = RawRanking(),
-    val hasProgress: Boolean = false,
+    /** `android.template`, e.g. `android.app.Notification$CallStyle`. */
+    val template: String? = null,
+    /** EXTRA_PROGRESS / EXTRA_PROGRESS_MAX / EXTRA_PROGRESS_INDETERMINATE (ProgressStyle sets them too). */
+    val progress: Int = 0,
+    val progressMax: Int = 0,
+    val progressIndeterminate: Boolean = false,
+    /** CallStyle: EXTRA_CALL_TYPE (1 incoming, 2 ongoing, 3 screening), 0 when absent. */
+    val callType: Int = 0,
+    /** CallStyle answer/decline/hang-up intents present in extras. */
+    val callCanAnswer: Boolean = false,
+    val callCanDecline: Boolean = false,
+    val callCanHangUp: Boolean = false,
+    /** Chronometer base (`Notification.when`) when the notification shows a running timer. */
+    val chronometerBase: Long? = null,
     /** Key into the icon store for `largeIcon`, if the listener cached one. */
     val largeIconKey: String? = null,
+    /** A vivid colour picked from the app icon, for "Colour from app icon". */
+    val appAccentArgb: Long? = null,
     /** Posted by Island's own "Send test notification" button. */
     val isSelfTest: Boolean = false,
-)
+) {
+    val hasProgress: Boolean get() = progressMax > 0 || progressIndeterminate
+}
 
 data class RawMessage(
     val text: String?,

@@ -53,6 +53,7 @@ import dev.indla.island.ui.settings.AppEntry
 import dev.indla.island.ui.settings.OemBatterySteps
 import dev.indla.island.ui.settings.PermissionStatus
 import dev.indla.island.ui.settings.Permissions
+import dev.indla.island.ui.settings.components.AccessibilityHelp
 import dev.indla.island.ui.settings.components.GlassCard
 import dev.indla.island.ui.settings.components.GlassPill
 import dev.indla.island.ui.settings.components.IslandPreview
@@ -62,9 +63,9 @@ import dev.indla.island.ui.settings.theme.LocalGlass
 
 /** The Play-required prominent disclosure, shown before the system accessibility screen. */
 const val ACCESSIBILITY_DISCLOSURE =
-    "Island uses the Accessibility Service API for one thing: to draw the island over your status bar, " +
-        "at the camera cutout, which normal overlays can't do. It also notes which app is in front so the " +
-        "island can stay out of your way.\n\n" +
+    "Island uses the Accessibility Service API to draw the island over your status bar, at the camera " +
+        "cutout, which normal overlays can't do. It also lists which windows are on screen (which app is in " +
+        "front, whether the status bar or notification shade is showing) so the island can stay out of your way.\n\n" +
         "Island does not use it to read, collect or share what's on your screen, what you type, or any " +
         "personal data, and Island has no internet access. You can turn it off any time in Settings → Accessibility."
 
@@ -131,13 +132,11 @@ fun OnboardingScreen(
                         Permissions.openNotificationAccess(context)
                     })
                     RowDivider(start = Space.rowPadding + Badge + Space.m)
-                    Step(2, "Accessibility", "To draw over the status bar", done[1], "Allow", onAction = {
+                    val turnOn = {
                         if (settings.accessibilityDisclosureAccepted) Permissions.openAccessibility(context) else showDisclosure = true
-                    }) {
-                        if (Permissions.restrictedSettingsLikely) {
-                            Hint("Greyed out? App info → ⋮ → Allow restricted settings.")
-                            GlassPill("Open App info", { Permissions.openAppInfo(context) }, compact = true)
-                        }
+                    }
+                    Step(2, "Accessibility", "To draw over the status bar", done[1], "Allow", onAction = turnOn) {
+                        AccessibilityHelp(permissions.restricted, onTurnOn = turnOn, onAppInfo = { Permissions.openAppInfo(context) })
                     }
                     RowDivider(start = Space.rowPadding + Badge + Space.m)
                     Step(3, "Battery", "So Android doesn't stop Island", done[2], "Allow", onAction = {

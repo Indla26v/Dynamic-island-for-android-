@@ -5,6 +5,7 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -21,6 +22,8 @@ data class PermissionStatus(
     val accessibility: Boolean = false,
     val batteryUnrestricted: Boolean = false,
     val postNotifications: Boolean = false,
+    /** Android 13+ blocks the accessibility switch for apps installed from a file until allowed. */
+    val restricted: Boolean = false,
 ) {
     val essentials get() = notificationAccess && accessibility
 }
@@ -32,7 +35,27 @@ object Permissions {
         batteryUnrestricted = context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName),
         postNotifications = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
+        restricted = restrictedSettings(context),
     )
+
+    /**
+     * Whether "restricted settings" is (likely) blocking the accessibility switch. Apps can't read
+     * the `access_restricted_settings` app-op itself (it needs a system permission), so:
+     * - Android 13+ tags file installs as DOWNLOADED_FILE / LOCAL_FILE, and those are restricted;
+     * - and when the user already tried the switch and came back with it still off, on an app
+     *   that didn't come from a store, the help is shown too (some OEMs report OTHER as source).
+     * Play and USB (adb) installs are never restricted.
+     */
+    private fun restrictedSettings(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
+        val source = runCatching { context.packageManager.getInstallSourceInfo(context.packageName).packageSource }.getOrNull()
+        if (source == PackageInstaller.PACKAGE_SOURCE_DOWNLOADED_FILE || source == PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE) return true
+        return attemptedAccessibility(context) && source != PackageInstaller.PACKAGE_SOURCE_STORE
+    }
+
+    private fun prefs(context: Context) = context.getSharedPreferences("island_setup", Context.MODE_PRIVATE)
+
+    private fun attemptedAccessibility(context: Context) = prefs(context).getBoolean(KEY_ATTEMPTED, false)
 
     private fun accessibilityEnabled(context: Context): Boolean {
         val target = IslandAccessibilityService.component(context)
@@ -55,7 +78,30 @@ object Permissions {
         launch(context, detail, Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
     }
 
-    fun openAccessibility(context: Context) = launch(context, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    /**
+     * Straight to Island's own switch where Settings supports it (the details screen takes the
+     * service component), otherwise the accessibility list.
+     */
+    fun openAccessibility(context: Context) {
+        prefs(context).edit().putBoolean(KEY_ATTEMPTED, true).apply()
+        val component = IslandAccessibilityService.component(context).flattenToString()
+        launch(
+            context,
+            Intent(ACTION_ACCESSIBILITY_DETAILS).putExtra(Intent.EXTRA_COMPONENT_NAME, component),
+            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+        )
+    }
+
+    /** Where Island's switch lives on this phone, in the words the phone's Settings uses. */
+    fun accessibilityPath(manufacturer: String = Build.MANUFACTURER): String = when (manufacturer.lowercase()) {
+        "vivo", "iqoo" -> "Settings → Shortcuts & accessibility → Accessibility → Island"
+        "samsung" -> "Settings → Accessibility → Installed apps → Island"
+        "xiaomi", "redmi", "poco" -> "Settings → Additional settings → Accessibility → Downloaded apps → Island"
+        "oneplus", "oppo", "realme" -> "Settings → Additional settings → Accessibility → Downloaded apps → Island"
+        "huawei", "honor" -> "Settings → Accessibility features → Accessibility → Island"
+        "motorola" -> "Settings → Accessibility → Island"
+        else -> "Settings → Accessibility → Island"
+    }
 
     /** Sideloaded APKs on Android 13+: restricted settings are unlocked from App info's ⋮ menu. */
     fun openAppInfo(context: Context) = launch(
@@ -70,7 +116,8 @@ object Permissions {
         Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
     )
 
-    val restrictedSettingsLikely: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    private const val ACTION_ACCESSIBILITY_DETAILS = "android.settings.ACCESSIBILITY_DETAILS_SETTINGS"
+    private const val KEY_ATTEMPTED = "accessibility_attempted"
 
     private fun launch(context: Context, vararg intents: Intent?) {
         for (intent in intents.filterNotNull()) {

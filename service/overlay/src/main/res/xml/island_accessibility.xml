@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Honest declaration: Island is not an accessibility tool, it uses the API to draw over the
-  status bar. It listens only to window-state changes (which app is in front, shade open) and
-  never reads screen content.
+  Honest declaration: Island is not an accessibility tool. It uses the API to draw over the
+  status bar, and to list which windows are on screen (is the status bar showing, is the shade
+  open, which app is in front). canRetrieveWindowContent is what Android requires for that window
+  list; Island never reads the content of any window.
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowsChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagDefault"
-    android:canRetrieveWindowContent="false"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
     android:description="@string/accessibility_description"
     android:isAccessibilityTool="false"
     android:notificationTimeout="100" />

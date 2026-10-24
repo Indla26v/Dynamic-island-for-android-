@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application android:label="Island (dev)" tools:replace="android:label">
+        <activity
+            android:name=".FullscreenTestActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
+
+        <!-- Debug and release can sit side by side; tell them apart in system settings. -->
+        <service
+            android:name="dev.indla.island.service.overlay.IslandAccessibilityService"
+            android:label="Island (dev)"
+            tools:replace="android:label" />
+        <service
+            android:name="dev.indla.island.service.listener.IslandNotificationListener"
+            android:label="Island (dev)"
+            tools:replace="android:label" />
+    </application>
+</manifest>

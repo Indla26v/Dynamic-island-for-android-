@@ -16,10 +16,15 @@ import androidx.compose.ui.graphics.ShaderBrush
  * Holds one compiled shader; [brush] only updates uniforms, so it is cheap to call every frame.
  */
 class GlassEdge {
-    private val runtime: Any? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Runtime() else null
+    // A driver or test environment that can't compile AGSL gets the gradient instead of a crash.
+    private val runtime: Any? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        runCatching { Runtime() }.getOrNull()
+    } else {
+        null
+    }
 
     fun brush(size: Size, strength: Float): Brush =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && runtime != null) {
             (runtime as Runtime).brush(size, strength)
         } else {
             Brush.linearGradient(

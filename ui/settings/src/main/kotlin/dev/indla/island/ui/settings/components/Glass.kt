@@ -379,6 +379,39 @@ fun <T> Segmented(options: List<T>, selected: T, label: (T) -> String, onSelect:
     }
 }
 
+/** A pill chip: an action ("Try a call") or a toggle when [selected] is set. */
+@Composable
+fun GlassChip(
+    label: String,
+    onClick: () -> Unit,
+    icon: ImageVector? = null,
+    selected: Boolean? = null,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val glass = LocalGlass.current
+    val interaction = remember { MutableInteractionSource() }
+    val on = selected == true
+    Row(
+        Modifier
+            .squishable(interaction)
+            .height(36.dp)
+            .then(
+                if (on) Modifier.clip(CircleShape).background(scheme.primary)
+                else Modifier.glassSurface(CircleShape, strong = true),
+            )
+            .clickable(interaction, null, onClick = onClick)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val color = if (on) scheme.onPrimary else if (selected == false) glass.contentSecondary else glass.content
+        if (icon != null) {
+            Icon(icon, null, tint = color, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(label, color = color, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
 @Composable
 fun RowDivider(start: Dp = Space.textInset) {
     Box(

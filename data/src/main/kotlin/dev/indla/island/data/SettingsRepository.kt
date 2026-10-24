@@ -13,6 +13,7 @@ import dev.indla.island.model.GestureAction
 import dev.indla.island.model.GestureMap
 import dev.indla.island.model.IslandAppearance
 import dev.indla.island.model.IslandSettings
+import dev.indla.island.model.LiveSettings
 import dev.indla.island.model.StylePreset
 import dev.indla.island.model.WhenToShow
 import kotlinx.coroutines.flow.Flow
@@ -51,6 +52,8 @@ class SettingsRepository @Inject constructor(
         val autoHide = intPreferencesKey("auto_hide_seconds")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
         val disclosure = booleanPreferencesKey("a11y_disclosure_accepted")
+        val autoColour = booleanPreferencesKey("auto_colour")
+        fun live(name: String) = booleanPreferencesKey("live_$name")
         fun gesture(slot: String) = stringPreferencesKey("gesture_$slot")
     }
 
@@ -71,6 +74,7 @@ class SettingsRepository @Inject constructor(
                 offsetYDp = this[Keys.offsetY] ?: a.offsetYDp,
                 showRestPill = this[Keys.restPill] ?: a.showRestPill,
                 glassIntensity = this[Keys.glass] ?: a.glassIntensity,
+                autoColour = this[Keys.autoColour] ?: a.autoColour,
             ),
             whenToShow = WhenToShow(
                 hideInForegroundApp = this[Keys.hideForeground] ?: w.hideInForegroundApp,
@@ -92,6 +96,15 @@ class SettingsRepository @Inject constructor(
                 expandedLongPress = gesture("expanded_long", g.expandedLongPress),
             ),
             autoHideSeconds = this[Keys.autoHide] ?: d.autoHideSeconds,
+            live = LiveSettings(
+                media = this[Keys.live("media")] ?: d.live.media,
+                calls = this[Keys.live("calls")] ?: d.live.calls,
+                progress = this[Keys.live("progress")] ?: d.live.progress,
+                charging = this[Keys.live("charging")] ?: d.live.charging,
+                batteryLow = this[Keys.live("battery_low")] ?: d.live.batteryLow,
+                ringer = this[Keys.live("ringer")] ?: d.live.ringer,
+                headphones = this[Keys.live("headphones")] ?: d.live.headphones,
+            ),
             onboardingDone = this[Keys.onboardingDone] ?: d.onboardingDone,
             accessibilityDisclosureAccepted = this[Keys.disclosure] ?: d.accessibilityDisclosureAccepted,
         )
@@ -106,6 +119,14 @@ class SettingsRepository @Inject constructor(
         this[Keys.offsetY] = s.appearance.offsetYDp
         this[Keys.restPill] = s.appearance.showRestPill
         this[Keys.glass] = s.appearance.glassIntensity
+        this[Keys.autoColour] = s.appearance.autoColour
+        this[Keys.live("media")] = s.live.media
+        this[Keys.live("calls")] = s.live.calls
+        this[Keys.live("progress")] = s.live.progress
+        this[Keys.live("charging")] = s.live.charging
+        this[Keys.live("battery_low")] = s.live.batteryLow
+        this[Keys.live("ringer")] = s.live.ringer
+        this[Keys.live("headphones")] = s.live.headphones
         this[Keys.hideForeground] = s.whenToShow.hideInForegroundApp
         this[Keys.hideFullscreen] = s.whenToShow.hideInFullscreen
         this[Keys.hideLandscape] = s.whenToShow.hideInLandscape

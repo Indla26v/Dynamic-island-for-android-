@@ -82,7 +82,7 @@ class TestNotificationPoster @Inject constructor(
             .addAction(0, "Mark as read", readIntent)
     }
 
-    private fun ensureChannel() {
+    fun ensureChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             context.getString(R.string.test_channel_name),

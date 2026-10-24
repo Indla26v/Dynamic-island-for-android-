@@ -1,8 +1,11 @@
 package dev.indla.island.engine
 
+import dev.indla.island.model.ActionRole
 import dev.indla.island.model.AppRule
+import dev.indla.island.model.CallState
 import dev.indla.island.model.IslandItem
 import dev.indla.island.model.ItemKind
+import dev.indla.island.model.LiveContent
 import dev.indla.island.model.MessageLine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -97,12 +100,45 @@ class NotificationParserTest {
     }
 
     @Test
-    fun liveActivities_areLaterPhase() {
-        assertEquals(SkipReason.LATER_PHASE_CATEGORY, skip(Fixtures.spotifyNowPlaying()))
-        assertEquals(SkipReason.LATER_PHASE_CATEGORY, skip(Fixtures.youtubeMusic()))
-        assertEquals(SkipReason.LATER_PHASE_CATEGORY, skip(Fixtures.phoneCall()))
-        assertEquals(SkipReason.LATER_PHASE_CATEGORY, skip(Fixtures.cabRide()))
-        assertEquals(SkipReason.ONGOING, skip(Fixtures.foodDeliveryProgress()))
+    fun mediaNotifications_areLeftToMediaSession() {
+        assertEquals(SkipReason.MEDIA_SESSION, skip(Fixtures.spotifyNowPlaying()))
+        assertEquals(SkipReason.MEDIA_SESSION, skip(Fixtures.youtubeMusic()))
+    }
+
+    @Test
+    fun ongoingDialerCall_isLiveWithTimer() {
+        val item = show(Fixtures.phoneCall())
+        assertEquals(ItemKind.CALL, item.kind)
+        val call = item.live as LiveContent.Call
+        assertEquals(CallState.ONGOING, call.state)
+        assertEquals(7_500L, call.startedAtMs)
+        assertEquals(ActionRole.HANG_UP, item.actions.single().role)
+    }
+
+    @Test
+    fun callStyleIncoming_usesExtrasActions() {
+        val item = show(Fixtures.incomingCallStyle())
+        assertEquals(CallState.INCOMING, (item.live as LiveContent.Call).state)
+        assertEquals("Incoming", item.glance)
+        assertEquals(listOf(ActionRole.DECLINE, ActionRole.ANSWER), item.actions.map { it.role })
+        assertEquals(ActionRole.ANSWER_INDEX, item.actions.last().index)
+    }
+
+    @Test
+    fun deliveriesRidesAndDownloads_areProgress() {
+        val food = show(Fixtures.foodDeliveryProgress())
+        assertEquals(ItemKind.PROGRESS, food.kind)
+        assertEquals(0.4f, (food.live as LiveContent.Progress).fraction!!, 0.001f)
+        assertEquals("40%", food.glance)
+        assertEquals(ItemKind.PROGRESS, show(Fixtures.cabRide()).kind)
+        assertEquals("Arriving in 12 min", (show(Fixtures.cabRide()).live as LiveContent.Progress).status)
+    }
+
+    @Test
+    fun ongoingWithoutProgress_isSkipped() {
+        val fgs = Fixtures.gmail().copy(ongoing = true, category = null)
+        assertEquals(SkipReason.ONGOING, skip(fgs))
+        assertEquals(SkipReason.SYSTEM_CATEGORY, skip(Fixtures.gmail().copy(category = "service")))
     }
 
     @Test

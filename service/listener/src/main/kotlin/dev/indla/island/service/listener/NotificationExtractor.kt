@@ -6,6 +6,7 @@ import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
+import android.os.Build
 import android.service.notification.NotificationListenerService.Ranking
 import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
@@ -29,8 +30,8 @@ import javax.inject.Singleton
 class NotificationExtractor @Inject constructor(
     @ApplicationContext private val context: Context,
     private val icons: IconStore,
+    private val apps: AppInfoCache,
 ) {
-    private val labels = HashMap<String, String>()
     private val ranking = Ranking()
 
     fun extract(sbn: StatusBarNotification, rankingMap: RankingMap?, groupHasChildren: Boolean): RawNotification {
@@ -44,7 +45,7 @@ class NotificationExtractor @Inject constructor(
         return RawNotification(
             key = sbn.key,
             packageName = pkg,
-            appLabel = appLabel(pkg),
+            appLabel = apps.label(pkg),
             postTime = sbn.postTime,
             groupKey = sbn.groupKey,
             isGroupSummary = n.flags and Notification.FLAG_GROUP_SUMMARY != 0,
@@ -69,8 +70,25 @@ class NotificationExtractor @Inject constructor(
                 )
             },
             ranking = ranking(sbn.key, rankingMap),
-            hasProgress = progressMax > 0 || indeterminate,
+            template = extras.getString(Notification.EXTRA_TEMPLATE),
+            progress = extras.getInt(Notification.EXTRA_PROGRESS, 0),
+            progressMax = progressMax,
+            progressIndeterminate = indeterminate,
+            callType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                extras.getInt(Notification.EXTRA_CALL_TYPE, 0)
+            } else {
+                extras.getInt("android.callType", 0)
+            },
+            callCanAnswer = extras.containsKey(Notification.EXTRA_ANSWER_INTENT),
+            callCanDecline = extras.containsKey(Notification.EXTRA_DECLINE_INTENT),
+            callCanHangUp = extras.containsKey(Notification.EXTRA_HANG_UP_INTENT),
+            chronometerBase = if (extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)) {
+                n.`when`.takeIf { it > 0 }
+            } else {
+                null
+            },
             largeIconKey = n.getLargeIcon()?.let { cacheIcon("$pkg|large|${sbn.key}", it) },
+            appAccentArgb = apps.accent(pkg),
             isSelfTest = pkg == context.packageName && n.channelId == TestNotificationPoster.CHANNEL_ID,
         )
     }
@@ -112,14 +130,6 @@ class NotificationExtractor @Inject constructor(
             matchesInterruptionFilter = ranking.matchesInterruptionFilter(),
             isSuspended = ranking.isSuspended,
         )
-    }
-
-    private fun appLabel(pkg: String): String = labels.getOrPut(pkg) {
-        runCatching {
-            val pm = context.packageManager
-            @Suppress("DEPRECATION")
-            pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
-        }.getOrDefault(pkg)
     }
 
     private fun cacheIcon(key: String, icon: IconCompat): String? =

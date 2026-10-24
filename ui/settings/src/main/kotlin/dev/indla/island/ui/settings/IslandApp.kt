@@ -69,6 +69,11 @@ fun IslandApp(showDebug: Boolean) {
         vm.refreshPermissions()
         if (granted) vm.sendTestNotification()
     }
+    val askNotifications = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
     val sendTest = {
         when {
             vm.sendTestNotification() -> Unit
@@ -116,6 +121,9 @@ fun IslandApp(showDebug: Boolean) {
                                 showDebug = showDebug,
                                 onEnabled = vm::setEnabled,
                                 onSendTest = sendTest,
+                                onTryCall = { if (!vm.tryCall()) askNotifications() },
+                                onTryDownload = { if (!vm.tryDownload()) askNotifications() },
+                                onTryMusic = vm::tryMusic,
                                 onOpenFixtures = { showFixtures = true },
                             )
                             1 -> AppsScreen(
@@ -124,6 +132,8 @@ fun IslandApp(showDebug: Boolean) {
                                 apps = apps,
                                 ruleFor = { pkg -> rules[pkg] ?: vm.ruleFor(pkg) },
                                 onSave = { vm.saveRule(it) },
+                                live = s.live,
+                                onLive = { vm.updateLive(it) },
                             )
                             else -> LookScreen(
                                 settings = s,

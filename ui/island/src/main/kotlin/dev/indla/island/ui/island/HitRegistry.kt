@@ -33,6 +33,11 @@ class HitRegistry {
 
     companion object {
         const val BUBBLE = "bubble"
+        const val BUBBLE_LEFT = "bubble:left"
+        const val MEDIA_PREVIOUS = "media:previous"
+        const val MEDIA_PLAY_PAUSE = "media:playpause"
+        const val MEDIA_NEXT = "media:next"
+        const val MEDIA_SEEK = "media:seek"
         const val REPLY_ROW = "reply"
         const val QUICK_MUTE = "quick:mute"
         const val QUICK_DISMISS = "quick:dismiss"

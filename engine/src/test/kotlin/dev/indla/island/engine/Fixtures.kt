@@ -144,7 +144,9 @@ object Fixtures {
         appLabel = "Swiggy",
         postTime = 7_000,
         ongoing = true,
-        hasProgress = true,
+        onlyAlertOnce = true,
+        progress = 40,
+        progressMax = 100,
         title = "Order on the way",
         text = "Arriving in 12 min",
     )
@@ -166,6 +168,55 @@ object Fixtures {
         ongoing = true,
         title = "Mom",
         text = "Ongoing call",
+        chronometerBase = 7_500,
+        actions = listOf(RawAction(0, "Hang up")),
+    )
+
+    /** CallStyle incoming call: answer/decline live in extras, not in actions. */
+    fun incomingCallStyle() = RawNotification(
+        key = "0|com.google.android.dialer|2|null|11013",
+        packageName = "com.google.android.dialer",
+        appLabel = "Phone",
+        postTime = 9_000,
+        category = "call",
+        template = "android.app.Notification\$CallStyle",
+        callType = 1,
+        callCanAnswer = true,
+        callCanDecline = true,
+        title = "Tania Castillo",
+        text = "Mobile",
+    )
+
+    fun downloadProgress(percent: Int) = RawNotification(
+        key = "0|com.android.providers.downloads|5|null|11100",
+        packageName = "com.android.providers.downloads",
+        appLabel = "Downloads",
+        postTime = 10_000,
+        category = "progress",
+        ongoing = true,
+        onlyAlertOnce = true,
+        progress = percent,
+        progressMax = 100,
+        title = "island-v1.apk",
+        text = "$percent% · 2 min left",
+    )
+
+    fun music(playing: Boolean, track: String = "Entropy") = dev.indla.island.model.MediaSnapshot(
+        packageName = "com.spotify.music",
+        appLabel = "Spotify",
+        media = dev.indla.island.model.LiveContent.Media(
+            track = track,
+            artist = "Beach Bunny",
+            playing = playing,
+            durationMs = 211_000,
+            positionMs = 170_000,
+            positionAtElapsedMs = 0,
+            speed = 1f,
+            artKey = null,
+            canPrevious = true,
+            canNext = true,
+            canSeek = true,
+        ),
     )
 
     fun silent(base: RawNotification = whatsAppDirect()) =

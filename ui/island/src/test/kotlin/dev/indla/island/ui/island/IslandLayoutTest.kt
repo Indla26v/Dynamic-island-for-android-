@@ -88,6 +88,6 @@ class IslandLayoutTest {
                 ),
             ),
         )
-        assertEquals(IslandLayout.LINE * 2, l.expandedHeight(state(3)) - l.expandedHeight(state(1)), 0.01f)
+        assertEquals(IslandLayout.TEXT_ROW * 2, l.expandedHeight(state(3)) - l.expandedHeight(state(1)), 0.01f)
     }
 }

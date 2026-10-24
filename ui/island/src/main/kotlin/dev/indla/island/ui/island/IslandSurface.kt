@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import dev.indla.island.model.IslandItem
 import dev.indla.island.model.IslandMode
 import dev.indla.island.model.IslandUiState
 import kotlinx.coroutines.delay
@@ -65,6 +66,7 @@ private val RectConverter = TwoWayConverter<IslandRect, AnimationVector4D>(
  *
  * @param hitRegistry receives the bounds of interactive spots (the overlay's hit window uses it).
  * @param drawReplyHint draw the reply placeholder; the overlay's hit window draws the real field.
+ * @param backdropBlur a real blur window sits behind the expanded card, so the tint can be lighter.
  */
 @Composable
 fun IslandSurface(
@@ -74,6 +76,7 @@ fun IslandSurface(
     hitRegistry: HitRegistry? = null,
     reduceTransparency: Boolean = false,
     drawReplyHint: Boolean = true,
+    backdropBlur: Boolean = false,
 ) {
     val target = layout.rectFor(state)
     val shape = remember { Animatable(target, RectConverter) }
@@ -116,7 +119,16 @@ fun IslandSurface(
     )
     val appearance = state.appearance
     val accent = Color(appearance.accentArgb)
-    val tint = if (reduceTransparency) 1f else 0.78f + 0.17f * appearance.glassIntensity.coerceIn(0f, 1f)
+    val intensity = appearance.glassIntensity.coerceIn(0f, 1f)
+    val tint by animateFloatAsState(
+        when {
+            reduceTransparency -> 1f
+            backdropBlur -> 0.5f + 0.3f * intensity
+            else -> 0.78f + 0.17f * intensity
+        },
+        tween(220),
+        label = "tint",
+    )
     val attached = layout.attachedToTop
     val edge = remember { GlassEdge() }
 
@@ -138,26 +150,8 @@ fun IslandSurface(
         }
 
         if (bubbleScale > 0.01f) {
-            val bubble = layout.bubble()
-            val secondary = state.secondary
-            Box(
-                Modifier
-                    .offset(bubble.left.dp, bubble.top.dp)
-                    .size(bubble.width.dp)
-                    .graphicsLayer {
-                        scaleX = bubbleScale
-                        scaleY = bubbleScale
-                        this.shape = androidx.compose.foundation.shape.CircleShape
-                        clip = true
-                    }
-                    .hitRegion(hitRegistry, HitRegistry.BUBBLE),
-                contentAlignment = Alignment.Center,
-            ) {
-                Canvas(Modifier.fillMaxSize()) { drawCircle(Color.Black) }
-                if (secondary != null) {
-                    Avatar(secondary.avatarKey, secondary.packageName, (bubble.width * 0.72f).dp)
-                }
-            }
+            state.secondary?.let { Bubble(it, layout.bubble(), bubbleScale, accent, hitRegistry, HitRegistry.BUBBLE) }
+            state.tertiary?.let { Bubble(it, layout.bubbleLeft(), bubbleScale, accent, hitRegistry, HitRegistry.BUBBLE_LEFT) }
         }
 
         val shownRect = layout.rectFor(shown)
@@ -178,6 +172,27 @@ fun IslandSurface(
                 IslandContent(shown, layout, shownRect, accent, hitRegistry, drawReplyHint)
             }
         }
+    }
+}
+
+/** A black circle beside the pill showing another item: a ring, art, a call, an avatar. */
+@Composable
+private fun Bubble(item: IslandItem, rect: IslandRect, scale: Float, accent: Color, registry: HitRegistry?, id: String) {
+    Box(
+        Modifier
+            .offset(rect.left.dp, rect.top.dp)
+            .size(rect.width.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                this.shape = androidx.compose.foundation.shape.CircleShape
+                clip = true
+            }
+            .hitRegion(registry, id),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.fillMaxSize()) { drawCircle(Color.Black) }
+        BubbleContent(item, rect.width.dp, accent)
     }
 }
 

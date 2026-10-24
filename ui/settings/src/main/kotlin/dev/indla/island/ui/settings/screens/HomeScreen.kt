@@ -3,7 +3,10 @@ package dev.indla.island.ui.settings.screens
 import android.service.notification.NotificationListenerService
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,6 +17,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.Call
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Layers
@@ -39,7 +45,9 @@ import dev.indla.island.model.ServiceHealth
 import dev.indla.island.service.listener.IslandNotificationListener
 import dev.indla.island.ui.settings.PermissionStatus
 import dev.indla.island.ui.settings.Permissions
+import dev.indla.island.ui.settings.components.AccessibilityHelp
 import dev.indla.island.ui.settings.components.GlassCard
+import dev.indla.island.ui.settings.components.GlassChip
 import dev.indla.island.ui.settings.components.GlassPill
 import dev.indla.island.ui.settings.components.GlassRow
 import dev.indla.island.ui.settings.components.IslandPreview
@@ -58,6 +66,9 @@ fun HomeScreen(
     showDebug: Boolean,
     onEnabled: (Boolean) -> Unit,
     onSendTest: () -> Unit,
+    onTryCall: () -> Unit,
+    onTryDownload: () -> Unit,
+    onTryMusic: () -> Unit,
     onOpenFixtures: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -136,35 +147,39 @@ fun HomeScreen(
             }
         }
 
-        if (Permissions.restrictedSettingsLikely && !permissions.accessibility) {
+        if (permissions.restricted && !permissions.accessibility) {
             item {
-                GlassCard(title = "Switch greyed out?") {
-                    Text(
-                        "Installed outside the Play Store on Android 13+? Open App info, tap ⋮, choose " +
-                            "Allow restricted settings, then turn Island on.",
-                        color = glass.contentSecondary,
-                        fontSize = 14.sp,
-                        lineHeight = 19.sp,
-                        modifier = Modifier.padding(horizontal = Space.rowPadding),
-                    )
-                    GlassPill(
-                        "Open App info",
-                        { Permissions.openAppInfo(context) },
-                        compact = true,
-                        modifier = Modifier.padding(start = Space.rowPadding, top = Space.m, bottom = Space.xs),
-                    )
+                GlassCard(title = "Turn on accessibility") {
+                    Box(Modifier.padding(horizontal = Space.rowPadding, vertical = Space.xs)) {
+                        AccessibilityHelp(
+                            restricted = true,
+                            onTurnOn = { Permissions.openAccessibility(context) },
+                            onAppInfo = { Permissions.openAppInfo(context) },
+                        )
+                    }
                 }
             }
         }
 
         item {
-            GlassCard {
-                GlassRow(
-                    "Send a test notification",
-                    subtitle = "Pops the island so you can try Reply",
-                    icon = Icons.AutoMirrored.Rounded.Send,
-                    onClick = onSendTest,
-                ) { Icon(Icons.Rounded.ChevronRight, null, tint = glass.contentSecondary) }
+            GlassCard(title = "Try it") {
+                // Real notifications and a real media session, through the same path as any app.
+                FlowRow(
+                    Modifier.padding(horizontal = Space.rowPadding, vertical = Space.xs),
+                    horizontalArrangement = Arrangement.spacedBy(Space.s),
+                    verticalArrangement = Arrangement.spacedBy(Space.s),
+                ) {
+                    GlassChip("Message", onSendTest, Icons.AutoMirrored.Rounded.Send)
+                    GlassChip("Call", onTryCall, Icons.Rounded.Call)
+                    GlassChip("Download", onTryDownload, Icons.Rounded.Download)
+                    GlassChip("Music", onTryMusic, Icons.Rounded.MusicNote)
+                }
+                Text(
+                    "Leave Island after starting music or a call to see it on the island.",
+                    color = glass.contentSecondary,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = Space.rowPadding, vertical = Space.xs),
+                )
                 if (showDebug) {
                     RowDivider()
                     GlassRow(

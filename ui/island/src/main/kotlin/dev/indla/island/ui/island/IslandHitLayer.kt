@@ -50,7 +50,8 @@ import kotlin.math.abs
 /** What the hit window reports back. Region ids come from [HitRegistry]. */
 class IslandHitCallbacks(
     val onGesture: (IslandGesture) -> Unit,
-    val onRegionTap: (String) -> Unit,
+    /** Region id and the tap point in render-window px (the scrubber needs where). */
+    val onRegionTap: (String, Offset) -> Unit,
     val onDrag: (Offset) -> Unit,
     val onDragEnd: () -> Unit,
     val onReplySend: (String) -> Unit,
@@ -103,7 +104,7 @@ fun IslandHitLayer(
                         Outcome.TAP -> {
                             val point = start + Offset(latestOrigin.x.toFloat(), latestOrigin.y.toFloat())
                             val region = registry.find(point)
-                            if (region != null) callbacks.onRegionTap(region) else callbacks.onGesture(IslandGesture.TAP)
+                            if (region != null) callbacks.onRegionTap(region, point) else callbacks.onGesture(IslandGesture.TAP)
                         }
                         Outcome.LONG_PRESS -> {
                             if (!latestState.positionEditing) callbacks.onGesture(IslandGesture.LONG_PRESS)

@@ -120,6 +120,12 @@ fun LookScreen(
                     )
                 }
                 GlassToggleRow(
+                    "Colour from app icon",
+                    a.autoColour,
+                    { v -> onAppearance { it.copy(autoColour = v) } },
+                    subtitle = "Tint each app's glance with its icon colour",
+                )
+                GlassToggleRow(
                     "Resting pill",
                     a.showRestPill,
                     { v -> onAppearance { it.copy(showRestPill = v) } },

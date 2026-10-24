@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="accessibility_label">Island</string>
-    <string name="accessibility_description">Island uses this permission only to draw the island over the status bar, at the camera cutout, and to know which app is in front so it can stay out of your way. It does not read, collect or share what is on your screen, and Island has no internet access.</string>
+    <string name="accessibility_description">Island uses this permission to draw the island over the status bar, at the camera cutout, and to see which windows are on screen (which app is in front, whether the status bar or notification shade is showing) so it can stay out of your way. It never reads the content of any window, does not collect or share what is on your screen, and Island has no internet access.</string>
 </resources>

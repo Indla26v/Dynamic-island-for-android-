@@ -23,7 +23,7 @@ object PreviewSamples {
         ),
         actions = listOf(IslandAction(0, "Reply", isReply = true), IslandAction(1, "Mark as read", isReply = false)),
         avatarKey = null,
-        postTime = 0,
+        postTime = System.currentTimeMillis(),
         groupKey = null,
         isGroupSummary = false,
     )

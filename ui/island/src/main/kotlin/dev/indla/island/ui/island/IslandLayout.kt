@@ -2,7 +2,9 @@ package dev.indla.island.ui.island
 
 import dev.indla.island.model.IslandAppearance
 import dev.indla.island.model.IslandMode
+import dev.indla.island.model.IslandItem
 import dev.indla.island.model.IslandUiState
+import dev.indla.island.model.ItemKind
 import dev.indla.island.model.StylePreset
 import kotlin.math.abs
 import kotlin.math.max
@@ -65,28 +67,50 @@ data class IslandLayout(
 
     fun expanded(height: Float) = IslandRect(clampLeft(expandedWidth), top, expandedWidth, height, EXPANDED_RADIUS)
 
-    /** The split-state bubble: beside the compact pill, on whichever side has room. */
+    /** Bubble right of the pill (the second item); falls back to the left when there's no room. */
     fun bubble(): IslandRect {
         val pill = compact()
-        val size = restHeight
         val right = pill.right + BUBBLE_GAP
-        val left = if (right + size <= screenWidth - EDGE) right else pill.left - BUBBLE_GAP - size
-        return IslandRect(left, top, size, size, size / 2)
+        val left = if (right + restHeight <= screenWidth - EDGE) right else pill.left - BUBBLE_GAP - restHeight
+        return IslandRect(left, top, restHeight, restHeight, restHeight / 2)
     }
 
-    /** Header height of the expanded card: the row the camera sits in. */
-    val headerHeight get() = max(restHeight, 40f)
+    /** Bubble left of the pill (the third item), so the island can show more at once. */
+    fun bubbleLeft(): IslandRect {
+        val pill = compact()
+        val other = bubble()
+        var left = pill.left - BUBBLE_GAP - restHeight
+        if (other.left < pill.left || left < EDGE) left = other.right + BUBBLE_GAP
+        return IslandRect(left, top, restHeight, restHeight, restHeight / 2)
+    }
+
+    /**
+     * The expanded card's top band, level with the camera. It carries only small accessories
+     * (app name, time, waveform) left and right of the camera; the body starts below it.
+     */
+    val bandHeight: Float get() = when (kind) {
+        CutoutKind.NONE -> BAND_MIN
+        else -> max(BAND_MIN, hole.bottom - top + 4f)
+    }
 
     fun expandedHeight(state: IslandUiState): Float {
-        val item = state.current ?: return headerHeight + PADDING_BOTTOM
-        var h = PADDING_TOP + headerHeight
-        h += when {
-            state.quickActionsOpen -> GAP + BUTTON_ROW
-            state.replyOpen -> item.lines.size.coerceAtMost(1) * LINE + GAP + REPLY_ROW
-            else -> item.lines.size.coerceAtMost(3) * LINE + if (item.actions.isNotEmpty()) GAP + BUTTON_ROW else 0f
+        val item = state.current ?: return bandHeight + PADDING_BOTTOM
+        val body = when {
+            state.quickActionsOpen -> AVATAR + GAP + BUTTON_ROW
+            item.kind == ItemKind.CALL -> CALL_ROW
+            item.kind == ItemKind.MEDIA -> MEDIA_ART + GAP + SCRUBBER + MEDIA_CONTROLS
+            item.kind == ItemKind.SYSTEM -> SYSTEM_ROW
+            item.kind == ItemKind.PROGRESS -> PROGRESS_BODY + actionsHeight(item)
+            state.replyOpen -> notificationBody(minOf(item.lines.size, 1)) + GAP + REPLY_ROW
+            else -> notificationBody(item.lines.size.coerceAtMost(3)) + actionsHeight(item)
         }
-        return h + PADDING_BOTTOM
+        return bandHeight + body + PADDING_BOTTOM
     }
+
+    /** Title plus one 20 dp row per line, beside a 40 dp avatar. */
+    fun notificationBody(lines: Int) = max(AVATAR, TEXT_ROW * (1 + lines))
+
+    private fun actionsHeight(item: IslandItem) = if (item.actions.isEmpty()) 0f else GAP + BUTTON_ROW
 
     /** Camera centre measured from a shape's left edge. */
     fun cameraOffsetIn(rect: IslandRect) = (if (kind == CutoutKind.NONE) centerX else hole.left + hole.width / 2) - rect.left
@@ -99,15 +123,22 @@ data class IslandLayout(
     }
 
     companion object {
-        const val EXPANDED_RADIUS = 30f
+        const val EXPANDED_RADIUS = 34f
         const val EDGE = 6f
         const val BUBBLE_GAP = 6f
-        const val PADDING_TOP = 4f
-        const val PADDING_BOTTOM = 14f
-        const val LINE = 46f
-        const val GAP = 8f
-        const val BUTTON_ROW = 40f
-        const val REPLY_ROW = 48f
+        const val BAND_MIN = 26f
+        const val PADDING_BOTTOM = 16f
+        const val GAP = 10f
+        const val AVATAR = 40f
+        const val TEXT_ROW = 20f
+        const val BUTTON_ROW = 36f
+        const val REPLY_ROW = 44f
+        const val CALL_ROW = 52f
+        const val MEDIA_ART = 56f
+        const val SCRUBBER = 24f
+        const val MEDIA_CONTROLS = 48f
+        const val PROGRESS_BODY = 64f
+        const val SYSTEM_ROW = 52f
 
         /**
          * @param cutout the top cutout's bounding rect, or null on devices without one.

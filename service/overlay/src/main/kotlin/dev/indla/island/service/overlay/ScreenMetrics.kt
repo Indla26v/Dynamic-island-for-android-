@@ -54,21 +54,24 @@ data class ScreenMetrics(
         /**
          * The camera itself, not the cutout's bounding rect: many devices report a punch hole's
          * bounds from the top edge down, which would make the island far too tall. The cutout
-         * path (API 31+) is exact; below that, a tall narrow rect is read as a hole at its bottom.
+         * path (API 31+) is used when it has a real shape; a tall narrow rectangle touching the
+         * top edge (vivo describes its punch hole as one, even in the path) is read as a round
+         * hole at its bottom.
          */
         private fun camera(bounding: Rect, cutout: DisplayCutout): RectF {
+            var shape = RectF(bounding)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val path = cutout.cutoutPath
                 if (path != null) {
                     val exact = RectF().also { path.computeBounds(it, true) }
-                    if (!exact.isEmpty && RectF(bounding).contains(exact)) return exact
+                    if (!exact.isEmpty && RectF(bounding).contains(exact)) shape = exact
                 }
             }
-            val w = bounding.width().toFloat()
-            return if (bounding.top == 0 && bounding.height() > w * 1.1f) {
-                RectF(bounding.left.toFloat(), bounding.bottom - w, bounding.right.toFloat(), bounding.bottom.toFloat())
+            val w = shape.width()
+            return if (shape.top <= 1f && shape.height() > w * 1.1f) {
+                RectF(shape.left, shape.bottom - w, shape.right, shape.bottom)
             } else {
-                RectF(bounding)
+                shape
             }
         }
     }

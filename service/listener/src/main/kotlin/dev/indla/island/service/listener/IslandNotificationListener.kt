@@ -19,6 +19,7 @@ class IslandNotificationListener : NotificationListenerService() {
     @Inject lateinit var extractor: NotificationExtractor
     @Inject lateinit var performer: NotificationActionPerformer
     @Inject lateinit var recorder: FixtureRecorder
+    @Inject lateinit var media: MediaWatcher
 
     override fun onListenerConnected() {
         performer.attach(this)
@@ -28,11 +29,13 @@ class IslandNotificationListener : NotificationListenerService() {
         existing.forEach(performer::remember)
         engine.onSnapshot(existing.map { extractor.extract(it, ranking, groupHasChildren = false) })
         engine.setListenerConnected(true)
+        media.start(component(this))
     }
 
     override fun onListenerDisconnected() {
         engine.setListenerConnected(false)
         performer.detach()
+        media.stop()
         // OEM skins kill and unbind us; ask to come back instead of waiting for a reboot.
         requestRebind(component(this))
     }

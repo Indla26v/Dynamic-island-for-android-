@@ -18,6 +18,7 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.WindowManager.LayoutParams
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
@@ -39,6 +40,8 @@ import dev.indla.island.model.Environment
 import dev.indla.island.model.IslandAppearance
 import dev.indla.island.model.IslandMode
 import dev.indla.island.model.IslandUiState
+import dev.indla.island.model.LiveContent
+import dev.indla.island.model.MediaCommand
 import dev.indla.island.ui.island.HitRegistry
 import dev.indla.island.ui.island.IslandHitCallbacks
 import dev.indla.island.ui.island.IslandHitLayer
@@ -47,7 +50,9 @@ import dev.indla.island.ui.island.IslandRect
 import dev.indla.island.ui.island.IslandSurface
 import dev.indla.island.ui.island.LocalIconStore
 import dev.indla.island.ui.island.Transparency
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -65,6 +70,7 @@ import kotlin.math.roundToInt
  * 2. Hit window: invisible, sized to the island's resting bounds, updated once per state change.
  *    It catches taps and swipes; everything else passes through. It becomes focusable only while
  *    the reply box is open, so the keyboard can attach.
+ * Plus a blur window under both, moved to the expanded card's bounds once the card settles.
  */
 @AndroidEntryPoint
 class IslandAccessibilityService : AccessibilityService() {
@@ -88,8 +94,13 @@ class IslandAccessibilityService : AccessibilityService() {
     private val dragOffset = mutableStateOf<Offset?>(null)
     private val hitOrigin = mutableStateOf(IntOffset.Zero)
     private val reduceTransparency = mutableStateOf(false)
+    private val blurShown = mutableStateOf(false)
     private var imePackages: Set<String> = emptySet()
     private var lastMode = IslandMode.REST
+    private var lastContent: Any? = null
+    private var blurJob: Job? = null
+    private var blur: BlurWindow? = null
+    private var systemEvents: SystemEventMonitor? = null
 
     override fun onServiceConnected() {
         windowManager = getSystemService(WindowManager::class.java)
@@ -99,9 +110,12 @@ class IslandAccessibilityService : AccessibilityService() {
         reduceTransparency.value = Transparency.reduced(this)
         metrics.value = ScreenMetrics.read(this, windowManager)
         owner.start()
+        // Added first so it stays under the island's own windows.
+        blur = BlurWindow(this) { supported -> if (!supported) blurShown.value = false }.also { it.create() }
         addRenderWindow()
         addHitWindow()
         registerScreenReceiver()
+        systemEvents = SystemEventMonitor(this) { engine.onSystemEvent(it) }.also { it.start() }
         updateEnvironment { it.copy(landscape = metrics.value?.landscape == true, locked = keyguard.isKeyguardLocked) }
 
         scope.launch {
@@ -112,14 +126,53 @@ class IslandAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        when (event.eventType) {
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> readWindows()
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                onWindowState(event)
+                readWindows()
+            }
+        }
+    }
+
+    private fun onWindowState(event: AccessibilityEvent) {
         val pkg = event.packageName?.toString() ?: return
         val cls = event.className?.toString().orEmpty()
         when {
+            // Fallback for when the window list isn't available; readWindows() overrides it.
             pkg == SYSTEM_UI -> if (looksLikeShade(event)) updateEnvironment { it.copy(shadeOpen = true) }
             pkg in imePackages || cls.startsWith("android.inputmethodservice") -> Unit
+            // Island's own blur dialog isn't "the app in front"; its settings screen is.
+            pkg == packageName && cls.startsWith("android.") -> Unit
+            cls in TRANSIENT_CLASSES -> Unit
             else -> updateEnvironment { it.copy(foregroundPackage = pkg, shadeOpen = false) }
         }
+    }
+
+    /**
+     * The window list says what insets can't tell an overlay above the status bar: whether the
+     * status bar is on screen (hidden = full-screen video or a game) and whether the shade is
+     * pulled down (a SystemUI window covering most of the screen). Only window types and bounds
+     * are read, never their content. This is framework-level, so it behaves the same on
+     * One UI, HyperOS and OriginOS as on Pixel.
+     */
+    private fun readWindows() {
+        val m = metrics.value ?: return
+        val list = runCatching { windows }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return
+        val screenW = m.widthDp * m.density
+        val screenH = m.heightDp * m.density
+        val bounds = android.graphics.Rect()
+        var statusBar = false
+        var shade = false
+        for (w in list) {
+            if (w.type != android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM) continue
+            w.getBoundsInScreen(bounds)
+            if (bounds.top <= 0 && bounds.width() >= screenW * 0.8f && bounds.height() in 1..(screenH / 6).toInt()) statusBar = true
+            if (bounds.height() >= screenH / 2 && bounds.width() >= screenW * 0.8f) shade = true
+        }
+        val fullscreen = !statusBar && !shade && !engine.environment.locked
+        updateEnvironment { it.copy(fullscreen = fullscreen, shadeOpen = shade) }
+        if (debugLog) Log.d(TAG, "windows: statusBar=$statusBar shade=$shade -> ${engine.environment}")
     }
 
     override fun onInterrupt() = Unit
@@ -160,6 +213,7 @@ class IslandAccessibilityService : AccessibilityService() {
                         hitRegistry = registry,
                         reduceTransparency = reduceTransparency.value,
                         drawReplyHint = false,
+                        backdropBlur = blurShown.value,
                     )
                 }
             }
@@ -200,8 +254,11 @@ class IslandAccessibilityService : AccessibilityService() {
         val m = metrics.value ?: return
         val layout = layoutFor(IslandAppearance()) ?: return
         // Tall enough for the biggest card, plus room for a downward position offset.
-        val maxHeightDp = layout.top + 48f + layout.headerHeight + 3 * IslandLayout.LINE +
-            IslandLayout.GAP + IslandLayout.BUTTON_ROW + IslandLayout.PADDING_BOTTOM + 96f
+        val tallest = maxOf(
+            layout.notificationBody(3) + IslandLayout.GAP + IslandLayout.BUTTON_ROW,
+            IslandLayout.MEDIA_ART + IslandLayout.GAP + IslandLayout.SCRUBBER + IslandLayout.MEDIA_CONTROLS,
+        )
+        val maxHeightDp = layout.top + layout.bandHeight + tallest + IslandLayout.PADDING_BOTTOM + 96f
         renderParams.height = (maxHeightDp * m.density).roundToInt()
         if (add) windowManager.addView(view, renderParams) else runCatching { windowManager.updateViewLayout(view, renderParams) }
     }
@@ -218,6 +275,12 @@ class IslandAccessibilityService : AccessibilityService() {
         if (state.mode == IslandMode.EXPANDED && lastMode != IslandMode.EXPANDED && state.visible) {
             host.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
         }
+        val content = listOf(state.mode, state.current?.key, state.replyOpen, state.quickActionsOpen, state.visible)
+        if (content != lastContent) {
+            lastContent = content
+            OverlayFrameStats.track(refreshRate())
+            updateBlur(state, layout, m)
+        }
         lastMode = state.mode
 
         val bounds: IslandRect? = when {
@@ -225,7 +288,9 @@ class IslandAccessibilityService : AccessibilityService() {
             state.positionEditing && state.mode == IslandMode.REST -> layout.rest().grow(14f)
             state.mode == IslandMode.REST -> null
             state.mode == IslandMode.EXPANDED -> layout.expanded(layout.expandedHeight(state))
-            state.mode == IslandMode.SPLIT -> layout.compact().union(layout.bubble())
+            state.mode == IslandMode.SPLIT -> layout.compact().union(layout.bubble()).let { u ->
+                if (state.tertiary != null) u.union(layout.bubbleLeft()) else u
+            }
             else -> layout.compact()
         }
         val d = m.density
@@ -247,6 +312,34 @@ class IslandAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * Blur only a settled card: hide it before any shrink, show it once the spring has landed,
+     * so the blur window moves once per state change and never chases the animation.
+     */
+    private fun updateBlur(state: IslandUiState, layout: IslandLayout, m: ScreenMetrics) {
+        blurJob?.cancel()
+        val window = blur ?: return
+        if (state.mode != IslandMode.EXPANDED || !state.visible || reduceTransparency.value || !window.supported) {
+            window.hide()
+            blurShown.value = false
+            return
+        }
+        blurJob = scope.launch {
+            delay(BLUR_SETTLE_MS)
+            val r = layout.expanded(layout.expandedHeight(state))
+            val d = m.density
+            window.show(
+                x = (r.left * d).roundToInt(),
+                y = (r.top * d).roundToInt(),
+                width = (r.width * d).roundToInt(),
+                height = (r.height * d).roundToInt(),
+                cornerPx = IslandLayout.EXPANDED_RADIUS * d,
+                blurPx = (BLUR_RADIUS_DP * d).roundToInt(),
+            )
+            blurShown.value = true
+        }
+    }
+
     private fun layoutFor(appearance: IslandAppearance): IslandLayout? {
         val m = metrics.value ?: return null
         val drag = dragOffset.value
@@ -261,13 +354,18 @@ class IslandAccessibilityService : AccessibilityService() {
             }
             engine.onGesture(gesture)
         },
-        onRegionTap = { id ->
+        onRegionTap = { id, point ->
             hitHost?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
             val state = engine.state.value
             val action = HitRegistry.actionIndex(id)
             when {
                 action != null -> engine.onActionTapped(action)
                 id == HitRegistry.BUBBLE -> engine.onSelectItem(state.items.indexOf(state.secondary))
+                id == HitRegistry.BUBBLE_LEFT -> engine.onSelectItem(state.items.indexOf(state.tertiary))
+                id == HitRegistry.MEDIA_PREVIOUS -> engine.onMediaCommand(MediaCommand.Previous)
+                id == HitRegistry.MEDIA_PLAY_PAUSE -> engine.onMediaCommand(MediaCommand.PlayPause)
+                id == HitRegistry.MEDIA_NEXT -> engine.onMediaCommand(MediaCommand.Next)
+                id == HitRegistry.MEDIA_SEEK -> seek(point)
                 id == HitRegistry.QUICK_MUTE -> engine.onMuteApp()
                 id == HitRegistry.QUICK_DISMISS -> engine.onDismissCurrent()
                 else -> engine.onGesture(dev.indla.island.model.IslandGesture.TAP)
@@ -293,6 +391,17 @@ class IslandAccessibilityService : AccessibilityService() {
         onReplyCancel = { engine.onReplyCancelled() },
     )
 
+    /** A service has no display of its own; ask DisplayManager for the default one. */
+    private fun refreshRate(): Float = getSystemService(android.hardware.display.DisplayManager::class.java)
+        ?.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.refreshRate ?: 60f
+
+    private fun seek(point: Offset) {
+        val media = engine.state.value.current?.live as? LiveContent.Media ?: return
+        val bar = registry[HitRegistry.MEDIA_SEEK] ?: return
+        val fraction = ((point.x - bar.left) / bar.width).coerceIn(0f, 1f)
+        engine.onMediaCommand(MediaCommand.SeekTo((media.durationMs * fraction).toLong()))
+    }
+
     // ---- Environment ---------------------------------------------------------------------------
 
     private fun updateEnvironment(transform: (Environment) -> Environment) {
@@ -302,7 +411,11 @@ class IslandAccessibilityService : AccessibilityService() {
     private fun watchFullscreen(view: View) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             view.setOnApplyWindowInsetsListener { v, insets ->
+                // The status bar source's visibility follows the focused app's request, which is
+                // what full-screen video and games ask for. Inset size alone isn't enough: some
+                // skins keep reporting the height while the bar is hidden.
                 val hidden = !insets.isVisible(WindowInsets.Type.statusBars())
+                if (debugLog) Log.d(TAG, "insets: status bar visible=${!hidden}")
                 updateEnvironment { it.copy(fullscreen = hidden) }
                 v.onApplyWindowInsets(insets)
             }
@@ -330,16 +443,28 @@ class IslandAccessibilityService : AccessibilityService() {
         ContextCompat.registerReceiver(this, screenReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
+    /**
+     * SystemUI windows that are the notification shade. Measured on Pixel: the shade arrives as
+     * a plain FrameLayout whose text carries the shade header (clock, signal); the volume panel,
+     * power menu and dialogs have their own classes. Closing the shade re-announces the app
+     * underneath, which clears the flag.
+     */
     private fun looksLikeShade(event: AccessibilityEvent): Boolean {
-        val text = (event.text.joinToString(" ") + " " + (event.contentDescription ?: "")).lowercase()
         val cls = event.className?.toString().orEmpty()
-        return "shade" in text || "quick settings" in text || "notification" in text ||
-            "Shade" in cls || "NotificationPanel" in cls
+        if (NOT_SHADE.any { it in cls }) return false
+        val text = (event.text.joinToString(" ") + " " + (event.contentDescription ?: "")).lowercase()
+        return cls == "android.widget.FrameLayout" || "Shade" in cls || "NotificationPanel" in cls ||
+            CLOCK.containsMatchIn(text) || "notification" in text || "quick settings" in text
     }
 
     private fun tearDown() {
         if (renderView == null && hitHost == null) return
         engine.setOverlayConnected(false)
+        blurJob?.cancel()
+        systemEvents?.stop()
+        systemEvents = null
+        blur?.destroy()
+        blur = null
         runCatching { unregisterReceiver(screenReceiver) }
         renderView?.let { runCatching { windowManager.removeViewImmediate(it) } }
         hitHost?.let { runCatching { windowManager.removeViewImmediate(it) } }
@@ -373,6 +498,18 @@ class IslandAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val SYSTEM_UI = "com.android.systemui"
+        private const val TAG = "IslandOverlay"
+        private const val BLUR_SETTLE_MS = 320L
+        private const val BLUR_RADIUS_DP = 28f
+
+        /** `adb shell setprop log.tag.IslandOverlay DEBUG` turns on detection logging. */
+        private val debugLog get() = Log.isLoggable(TAG, Log.DEBUG)
+
+        /** Toasts, popups and other apps' dialogs don't change which app is in front. */
+        private val NOT_SHADE = listOf("Volume", "Dialog", "GlobalActions", "Toast", "Recents", "Keyguard")
+        private val CLOCK = Regex("""\b\d{1,2}:\d{2}\b""")
+
+        private val TRANSIENT_CLASSES = setOf("android.widget.Toast\$TN", "android.widget.PopupWindow")
 
         fun component(context: Context) = ComponentName(context, IslandAccessibilityService::class.java)
 

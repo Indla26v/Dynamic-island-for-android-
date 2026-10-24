@@ -15,6 +15,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.indla.island.data.ApplicationScope
 import dev.indla.island.data.rules.AppRuleRepository
 import dev.indla.island.engine.IslandEffects
+import dev.indla.island.model.ActionRole
+import dev.indla.island.model.MediaCommand
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
@@ -31,6 +33,7 @@ class NotificationActionPerformer @Inject constructor(
     @ApplicationContext private val context: Context,
     private val rules: AppRuleRepository,
     @ApplicationScope private val scope: CoroutineScope,
+    private val media: MediaWatcher,
 ) : IslandEffects {
     private var listener = WeakReference<NotificationListenerService>(null)
     private val posted = object : LinkedHashMap<String, StatusBarNotification>(32, 0.75f, true) {
@@ -55,18 +58,46 @@ class NotificationActionPerformer @Inject constructor(
     }
 
     override fun openItem(key: String) {
+        if (key.startsWith(MEDIA_PREFIX)) {
+            // The player's own screen if it offers one, otherwise its launcher activity.
+            val pkg = key.removePrefix(MEDIA_PREFIX)
+            if (media.sessionActivity(pkg)?.let { send(it) } != true) launch(pkg)
+            return
+        }
         val sbn = posted[key] ?: return
         val sent = sbn.notification.contentIntent?.let { send(it) } == true
-        if (!sent) {
-            context.packageManager.getLaunchIntentForPackage(sbn.packageName)?.let {
-                it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                runCatching { context.startActivity(it) }
-            }
-        }
+        if (!sent) launch(sbn.packageName)
         if (sbn.notification.flags and Notification.FLAG_AUTO_CANCEL != 0) dismissNotification(key)
     }
 
     override fun invokeAction(key: String, actionIndex: Int) {
+        val sbn = posted[key] ?: return
+        if (actionIndex < 0) {
+            val extras = sbn.notification.extras
+            val intent = when (actionIndex) {
+                ActionRole.ANSWER_INDEX -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    extras.getParcelable(Notification.EXTRA_ANSWER_INTENT, PendingIntent::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    extras.getParcelable(Notification.EXTRA_ANSWER_INTENT)
+                }
+                ActionRole.DECLINE_INDEX -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    extras.getParcelable(Notification.EXTRA_DECLINE_INTENT, PendingIntent::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    extras.getParcelable(Notification.EXTRA_DECLINE_INTENT)
+                }
+                ActionRole.HANG_UP_INDEX -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    extras.getParcelable(Notification.EXTRA_HANG_UP_INTENT, PendingIntent::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    extras.getParcelable(Notification.EXTRA_HANG_UP_INTENT)
+                }
+                else -> null
+            }
+            send(intent)
+            return
+        }
         val action = action(key, actionIndex) ?: return
         send(action.actionIntent)
     }
@@ -79,6 +110,15 @@ class NotificationActionPerformer @Inject constructor(
         RemoteInput.addResultsToIntent(inputs.toTypedArray(), fillIn, results)
         RemoteInput.setResultsSource(fillIn, RemoteInput.SOURCE_FREE_FORM_INPUT)
         send(action.actionIntent, fillIn)
+    }
+
+    override fun mediaCommand(packageName: String, command: MediaCommand) = media.command(packageName, command)
+
+    private fun launch(packageName: String) {
+        context.packageManager.getLaunchIntentForPackage(packageName)?.let {
+            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            runCatching { context.startActivity(it) }
+        }
     }
 
     override fun dismissNotification(key: String) {
@@ -114,5 +154,6 @@ class NotificationActionPerformer @Inject constructor(
 
     private companion object {
         const val TAG = "IslandActions"
+        const val MEDIA_PREFIX = "media:"
     }
 }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,7 +21,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BatteryAlert
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -43,9 +51,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.indla.island.model.AppRule
 import dev.indla.island.model.IslandAppearance
+import dev.indla.island.model.LiveSettings
 import dev.indla.island.model.Priority
 import dev.indla.island.ui.island.AppIconImage
 import dev.indla.island.ui.settings.AppEntry
+import dev.indla.island.ui.settings.components.GlassChip
 import dev.indla.island.ui.settings.components.GlassToggleRow
 import dev.indla.island.ui.settings.components.IslandPreview
 import dev.indla.island.ui.settings.components.RowDivider
@@ -68,6 +78,8 @@ fun AppsScreen(
     apps: List<AppEntry>?,
     ruleFor: (String) -> AppRule,
     onSave: (AppRule) -> Unit,
+    live: LiveSettings,
+    onLive: ((LiveSettings) -> LiveSettings) -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var expanded by rememberSaveable { mutableStateOf<String?>(null) }
@@ -76,6 +88,9 @@ fun AppsScreen(
 
     // Rows sit 1 dp apart so each section reads as one inset group; sections add their own space.
     TabScaffold(title = "Apps", pinned = { IslandPreview(appearance, reduceTransparency) }, itemSpacing = 1.dp) {
+        item(key = "live") {
+            LiveCard(live, onLive, Modifier.padding(bottom = Space.cardGap))
+        }
         item(key = "search") {
             SearchField(query, { query = it }, Modifier.padding(bottom = Space.s))
         }
@@ -116,6 +131,26 @@ private fun LazyListScope.section(
         Column(Modifier.animateItem().fillMaxWidth().glassSurface(groupShape(index, apps.size))) {
             AppRow(app, rule, onToggle = { onSave(rule.copy(show = it)) }, onClick = { onExpand(if (open) null else app.packageName) })
             AnimatedVisibility(open) { RuleEditor(rule, onSave) }
+        }
+    }
+}
+
+/** Live activities and system events: what may use the island besides app notifications. */
+@Composable
+private fun LiveCard(live: LiveSettings, onLive: ((LiveSettings) -> LiveSettings) -> Unit, modifier: Modifier = Modifier) {
+    dev.indla.island.ui.settings.components.GlassCard(modifier, title = "Live activities") {
+        FlowRow(
+            Modifier.padding(horizontal = Space.rowPadding, vertical = Space.xs),
+            horizontalArrangement = Arrangement.spacedBy(Space.s),
+            verticalArrangement = Arrangement.spacedBy(Space.s),
+        ) {
+            GlassChip("Music", { onLive { it.copy(media = !it.media) } }, Icons.Rounded.MusicNote, live.media)
+            GlassChip("Calls", { onLive { it.copy(calls = !it.calls) } }, Icons.Rounded.Call, live.calls)
+            GlassChip("Progress", { onLive { it.copy(progress = !it.progress) } }, Icons.Rounded.Download, live.progress)
+            GlassChip("Charging", { onLive { it.copy(charging = !it.charging) } }, Icons.Rounded.Bolt, live.charging)
+            GlassChip("Battery low", { onLive { it.copy(batteryLow = !it.batteryLow) } }, Icons.Rounded.BatteryAlert, live.batteryLow)
+            GlassChip("Ringer", { onLive { it.copy(ringer = !it.ringer) } }, Icons.Rounded.NotificationsActive, live.ringer)
+            GlassChip("Headphones", { onLive { it.copy(headphones = !it.headphones) } }, Icons.Rounded.Headphones, live.headphones)
         }
     }
 }

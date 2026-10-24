@@ -6,6 +6,7 @@ data class IslandSettings(
     val whenToShow: WhenToShow = WhenToShow(),
     val gestures: GestureMap = GestureMap(),
     val autoHideSeconds: Int = 5,
+    val live: LiveSettings = LiveSettings(),
     val onboardingDone: Boolean = false,
     val accessibilityDisclosureAccepted: Boolean = false,
 )
@@ -21,7 +22,27 @@ data class IslandAppearance(
     val showRestPill: Boolean = false,
     /** 0 = clear, 1 = tinted. */
     val glassIntensity: Float = 0.6f,
+    /** Tint each app's items with a colour picked from its icon (a per-app colour still wins). */
+    val autoColour: Boolean = true,
 )
+
+/** Which live activities and system events may use the island. */
+data class LiveSettings(
+    val media: Boolean = true,
+    val calls: Boolean = true,
+    val progress: Boolean = true,
+    val charging: Boolean = true,
+    val batteryLow: Boolean = true,
+    val ringer: Boolean = true,
+    val headphones: Boolean = true,
+) {
+    fun allows(event: SystemEvent): Boolean = when (event) {
+        SystemEvent.CHARGING, SystemEvent.UNPLUGGED -> charging
+        SystemEvent.BATTERY_LOW -> batteryLow
+        SystemEvent.RINGER_NORMAL, SystemEvent.RINGER_VIBRATE, SystemEvent.RINGER_SILENT -> ringer
+        SystemEvent.HEADPHONES_CONNECTED, SystemEvent.HEADPHONES_DISCONNECTED -> headphones
+    }
+}
 
 enum class StylePreset { CLASSIC_PILL, MINIMAL, NOTCH_ATTACHED }
 

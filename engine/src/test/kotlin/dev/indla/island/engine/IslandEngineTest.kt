@@ -6,6 +6,9 @@ import dev.indla.island.model.IslandGesture
 import dev.indla.island.model.IslandMode
 import dev.indla.island.model.IslandSettings
 import dev.indla.island.model.ItemKind
+import dev.indla.island.model.LiveContent
+import dev.indla.island.model.MediaCommand
+import dev.indla.island.model.SystemEvent
 import dev.indla.island.model.Priority
 import dev.indla.island.model.WhenToShow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -29,6 +32,7 @@ class IslandEngineTest {
         override fun reply(key: String, actionIndex: Int, text: String) { calls += "reply:$key:$actionIndex:$text" }
         override fun dismissNotification(key: String) { calls += "dismiss:$key" }
         override fun muteApp(packageName: String) { calls += "mute:$packageName" }
+        override fun mediaCommand(packageName: String, command: MediaCommand) { calls += "media:$packageName:$command" }
     }
 
     private class Harness(scope: TestScope) {
@@ -287,5 +291,139 @@ class IslandEngineTest {
             Fixtures.whatsAppDirect().copy(packageName = "dev.indla.island", key = "self", isSelfTest = true),
         )
         assertEquals(IslandMode.COMPACT, h.state.mode)
+    }
+
+    // ---- Live activities --------------------------------------------------------------------
+
+    @Test
+    fun ongoingCall_staysUntilRemoved() = test { h ->
+        h.engine.onPosted(Fixtures.phoneCall())
+        assertEquals(IslandMode.COMPACT, h.state.mode)
+        advanceTimeBy(120_000); runCurrent()
+        assertEquals("live activities never auto-hide", ItemKind.CALL, h.state.current?.kind)
+        h.engine.onRemoved(Fixtures.phoneCall().key)
+        assertEquals(IslandMode.REST, h.state.mode)
+    }
+
+    @Test
+    fun notificationTakesOver_thenIslandReturnsToCall() = test { h ->
+        h.engine.onPosted(Fixtures.phoneCall())
+        h.engine.onPosted(Fixtures.whatsAppDirect())
+        assertEquals(IslandMode.SPLIT, h.state.mode)
+        assertEquals(ItemKind.MESSAGE, h.state.current?.kind)
+        assertEquals(ItemKind.CALL, h.state.secondary?.kind)
+        advanceTimeBy(6_000); runCurrent()
+        assertEquals(IslandMode.COMPACT, h.state.mode)
+        assertEquals(ItemKind.CALL, h.state.current?.kind)
+    }
+
+    @Test
+    fun progressUpdates_inPlace_withoutPopping() = test { h ->
+        h.engine.onPosted(Fixtures.downloadProgress(10))
+        h.engine.onPosted(Fixtures.whatsAppDirect())
+        assertEquals(ItemKind.MESSAGE, h.state.current?.kind)
+        h.engine.onPosted(Fixtures.downloadProgress(55))
+        assertEquals("tick must not steal the island", ItemKind.MESSAGE, h.state.current?.kind)
+        assertEquals(0.55f, (h.state.secondary?.live as LiveContent.Progress).fraction!!, 0.001f)
+    }
+
+    @Test
+    fun media_playingStays_pausedLingersThenLeaves() = test { h ->
+        h.engine.onMedia(Fixtures.music(playing = true))
+        assertEquals(ItemKind.MEDIA, h.state.current?.kind)
+        advanceTimeBy(60_000); runCurrent()
+        assertEquals(ItemKind.MEDIA, h.state.current?.kind)
+        h.engine.onMedia(Fixtures.music(playing = false))
+        advanceTimeBy(IslandEngine.LIVE_LINGER_MS + 100); runCurrent()
+        assertEquals(IslandMode.REST, h.state.mode)
+    }
+
+    @Test
+    fun media_pausedSessionNobodySawStart_isNotNews() = test { h ->
+        h.engine.onMedia(Fixtures.music(playing = false))
+        assertEquals(IslandMode.REST, h.state.mode)
+    }
+
+    @Test
+    fun media_controlsGoToTheSession() = test { h ->
+        h.engine.onMedia(Fixtures.music(playing = true))
+        h.engine.onGesture(IslandGesture.TAP)
+        h.engine.onMediaCommand(MediaCommand.Next)
+        assertEquals("media:com.spotify.music:Next", h.effects.calls.single())
+    }
+
+    @Test
+    fun swipeUpHidesLive_untilItChanges() = test { h ->
+        h.engine.onMedia(Fixtures.music(playing = true))
+        h.engine.onGesture(IslandGesture.SWIPE_UP)
+        assertEquals(IslandMode.REST, h.state.mode)
+        h.engine.onMedia(Fixtures.music(playing = true).let { it.copy(media = it.media.copy(positionMs = 180_000)) })
+        assertEquals("a seek isn't news", IslandMode.REST, h.state.mode)
+        h.engine.onMedia(Fixtures.music(playing = true, track = "Sports"))
+        assertEquals("a new track is", ItemKind.MEDIA, h.state.current?.kind)
+    }
+
+    @Test
+    fun liveActivity_isParkedWhileItsAppIsOpen() = test { h ->
+        h.engine.onMedia(Fixtures.music(playing = true))
+        h.engine.updateEnvironment(Environment(foregroundPackage = "com.spotify.music"))
+        assertEquals(IslandMode.REST, h.state.mode)
+        h.engine.onMedia(Fixtures.music(playing = true, track = "Sports"))
+        assertEquals(IslandMode.REST, h.state.mode)
+        h.engine.updateEnvironment(Environment(foregroundPackage = "com.android.launcher"))
+        assertEquals("Sports", h.state.current?.title)
+    }
+
+    @Test
+    fun callAnswer_invokesExtrasIntent_andKeepsTheActivity() = test { h ->
+        h.engine.onPosted(Fixtures.incomingCallStyle())
+        h.engine.onGesture(IslandGesture.TAP)
+        h.engine.onActionTapped(dev.indla.island.model.ActionRole.ANSWER_INDEX)
+        assertEquals("action:${Fixtures.incomingCallStyle().key}:-1", h.effects.calls.single())
+        assertEquals(ItemKind.CALL, h.state.current?.kind)
+    }
+
+    @Test
+    fun systemEvent_isBrief_andRespectsSettings() = test { h ->
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.CHARGING, 54, "54%"))
+        assertEquals(ItemKind.SYSTEM, h.state.current?.kind)
+        advanceTimeBy(IslandEngine.SYSTEM_EVENT_MS + 100); runCurrent()
+        assertEquals(IslandMode.REST, h.state.mode)
+        h.settings.value = h.settings.value.copy(live = h.settings.value.live.copy(charging = false))
+        runCurrent()
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.CHARGING, 55, "55%"))
+        assertEquals(IslandMode.REST, h.state.mode)
+    }
+
+    @Test
+    fun liveKindsCanBeTurnedOff() = test { h ->
+        h.settings.value = h.settings.value.copy(live = h.settings.value.live.copy(calls = false, media = false))
+        runCurrent()
+        h.engine.onPosted(Fixtures.phoneCall())
+        h.engine.onMedia(Fixtures.music(playing = true))
+        assertEquals(IslandMode.REST, h.state.mode)
+    }
+
+    @Test
+    fun autoColour_fromAppIcon_unlessRuleSetsOne() = test { h ->
+        h.engine.onPosted(Fixtures.whatsAppDirect().copy(appAccentArgb = 0xFF25D366))
+        assertEquals(0xFF25D366, h.state.current?.accentArgb)
+        h.rules.value = mapOf("com.whatsapp" to AppRule("com.whatsapp", show = true, accentArgb = 0xFFFF0000))
+        runCurrent()
+        h.engine.onPosted(Fixtures.whatsAppDirect(count = 3).copy(appAccentArgb = 0xFF25D366))
+        assertEquals(0xFFFF0000, h.state.current?.accentArgb)
+    }
+
+    @Test
+    fun postsBeforeRulesLoad_waitForThem() = runTest {
+        val rules = kotlinx.coroutines.flow.MutableSharedFlow<Map<String, AppRule>>()
+        val engine = IslandEngine(backgroundScope, MutableStateFlow(IslandSettings()), rules, clock = { testScheduler.currentTime })
+        runCurrent()
+        engine.onPosted(Fixtures.whatsAppDirect())
+        assertEquals(IslandMode.REST, engine.state.value.mode)
+        rules.emit(mapOf("com.whatsapp" to AppRule("com.whatsapp", show = false)))
+        runCurrent()
+        assertEquals("the user turned WhatsApp off", IslandMode.REST, engine.state.value.mode)
+        backgroundScope.cancel()
     }
 }

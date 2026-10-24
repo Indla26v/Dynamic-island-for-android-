@@ -13,11 +13,15 @@ import dev.indla.island.model.DefaultApps
 import dev.indla.island.model.GestureMap
 import dev.indla.island.model.IslandAppearance
 import dev.indla.island.model.IslandSettings
+import dev.indla.island.model.LiveSettings
 import dev.indla.island.model.ServiceHealth
 import dev.indla.island.model.WhenToShow
 import dev.indla.island.service.listener.FixtureEntry
 import dev.indla.island.service.listener.FixtureRecorder
+import dev.indla.island.service.listener.selftest.TestLiveActivities
 import dev.indla.island.service.listener.selftest.TestNotificationPoster
+import dev.indla.island.service.overlay.FrameStats
+import dev.indla.island.service.overlay.OverlayFrameStats
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -35,12 +39,14 @@ class SettingsViewModel @Inject constructor(
     private val poster: TestNotificationPoster,
     private val installedApps: InstalledApps,
     private val recorder: FixtureRecorder,
+    private val live: TestLiveActivities,
 ) : ViewModel() {
     /** Null until DataStore has been read, so onboarding never flashes for returning users. */
     val settings: StateFlow<IslandSettings?> = settingsRepo.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val rules: StateFlow<Map<String, AppRule>> = rulesRepo.rules.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
     val health: StateFlow<ServiceHealth> = engine.health
     val fixtures: StateFlow<List<FixtureEntry>> = recorder.entries
+    val frameStats: StateFlow<FrameStats> = OverlayFrameStats.stats
 
     private val _permissions = MutableStateFlow(Permissions.status(context))
     val permissions: StateFlow<PermissionStatus> = _permissions.asStateFlow()
@@ -68,6 +74,15 @@ class SettingsViewModel @Inject constructor(
     fun updateGestures(transform: (GestureMap) -> GestureMap) = update { it.copy(gestures = transform(it.gestures)) }
 
     fun setAutoHide(seconds: Int) = update { it.copy(autoHideSeconds = seconds) }
+
+    fun updateLive(transform: (LiveSettings) -> LiveSettings) = update { it.copy(live = transform(it.live)) }
+
+    /** "Try it" live activities; false when notifications are blocked and need the permission. */
+    fun tryCall(): Boolean = poster.canPost().also { if (it) live.incomingCall() }
+
+    fun tryDownload(): Boolean = poster.canPost().also { if (it) live.startDownload() }
+
+    fun tryMusic() = live.playMusic()
 
     fun acceptDisclosure() = update { it.copy(accessibilityDisclosureAccepted = true) }
 

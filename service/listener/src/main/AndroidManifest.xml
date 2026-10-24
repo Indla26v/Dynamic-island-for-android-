@@ -13,10 +13,11 @@
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
-            <!-- MVP shows chats and alerting notifications; silent and ongoing ones come in v1. -->
+            <!-- Ongoing (calls, progress) and silent (downloads) are needed for live activities;
+                 the engine decides what pops. -->
             <meta-data
                 android:name="android.service.notification.default_filter_types"
-                android:value="conversations|alerting" />
+                android:value="conversations|alerting|ongoing|silent" />
         </service>
 
         <receiver

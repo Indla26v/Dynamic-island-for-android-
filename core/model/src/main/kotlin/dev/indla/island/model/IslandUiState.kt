@@ -18,8 +18,11 @@ data class IslandUiState(
 ) {
     val current: IslandItem? get() = items.getOrNull(currentIndex)
 
-    /** The item shown in the small bubble of the split state. */
+    /** The item shown in the bubble right of the island in the split state. */
     val secondary: IslandItem? get() = if (items.size > 1) items[(currentIndex + 1) % items.size] else null
+
+    /** A third item gets a bubble on the left, so the island can show more at once. */
+    val tertiary: IslandItem? get() = if (items.size > 2) items[(currentIndex + 2) % items.size] else null
 
     val showsRestPill: Boolean get() = appearance.showRestPill || positionEditing
 }

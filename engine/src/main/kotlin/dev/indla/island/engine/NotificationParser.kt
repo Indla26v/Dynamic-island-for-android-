@@ -1,23 +1,36 @@
 package dev.indla.island.engine
 
+import dev.indla.island.model.ActionRole
 import dev.indla.island.model.AppRule
+import dev.indla.island.model.CallState
 import dev.indla.island.model.IslandAction
 import dev.indla.island.model.IslandItem
 import dev.indla.island.model.ItemKind
+import dev.indla.island.model.LiveContent
 import dev.indla.island.model.MessageLine
 import dev.indla.island.model.RawMessage
 import dev.indla.island.model.RawNotification
+import kotlin.math.roundToInt
 
 sealed interface ParseResult {
     data class Show(val item: IslandItem) : ParseResult
     data class Skip(val reason: SkipReason) : ParseResult
 }
 
-enum class SkipReason { ONGOING, LATER_PHASE_CATEGORY, PROGRESS, EMPTY }
+enum class SkipReason {
+    /** Ongoing but not a call or progress (foreground services, system status). */
+    ONGOING,
+    /** Media is read from MediaSession instead, so its notification would be a duplicate. */
+    MEDIA_SESSION,
+    SYSTEM_CATEGORY,
+    EMPTY,
+}
 
 /**
  * Turns a [RawNotification] into an [IslandItem]. Chats are read from MessagingStyle (sender,
- * timestamp, avatar), never by joining text lines, and repeated media is collapsed.
+ * timestamp, avatar), never by joining text lines, and repeated media is collapsed. Calls
+ * (CallStyle or a dialer's ongoing notification) and progress (downloads, deliveries, rides,
+ * Android 16 ProgressStyle) become live activities.
  *
  * @param redactedMarkers texts Android substitutes when it hides content from untrusted
  *   listeners (Android 15+). The listener adds the device's localized system string.
@@ -28,14 +41,13 @@ class NotificationParser(
     private val redactedMarkers = redactedMarkers.map { it.trim().lowercase() }.toSet()
 
     fun parse(raw: RawNotification, rule: AppRule): ParseResult {
-        if (!raw.isSelfTest) {
-            // Calls, media, timers and navigation are live activities: v1 scope, not MVP.
-            if (raw.category in LATER_PHASE_CATEGORIES) return ParseResult.Skip(SkipReason.LATER_PHASE_CATEGORY)
-            if (raw.ongoing) return ParseResult.Skip(SkipReason.ONGOING)
-            if (raw.hasProgress) return ParseResult.Skip(SkipReason.PROGRESS)
-        }
+        if (isMedia(raw)) return ParseResult.Skip(SkipReason.MEDIA_SESSION)
+        if (raw.category in SYSTEM_CATEGORIES) return ParseResult.Skip(SkipReason.SYSTEM_CATEGORY)
 
         val item = when {
+            isCall(raw) -> callItem(raw)
+            isProgress(raw) -> progressItem(raw)
+            raw.ongoing -> return ParseResult.Skip(SkipReason.ONGOING)
             isRedacted(raw) -> hiddenItem(raw)
             raw.messages.isNotEmpty() -> messagingItem(raw)
             else -> genericItem(raw) ?: return ParseResult.Skip(SkipReason.EMPTY)
@@ -46,6 +58,83 @@ class NotificationParser(
                 accentArgb = rule.accentArgb,
                 hideContentOnLock = rule.hideContentOnLock,
             ),
+        )
+    }
+
+    fun isMedia(raw: RawNotification): Boolean =
+        raw.category == "transport" || raw.template?.contains("MediaStyle") == true
+
+    fun isCall(raw: RawNotification): Boolean =
+        raw.template?.endsWith("CallStyle") == true || raw.callType != 0 || raw.category == "call"
+
+    /** Ongoing work with progress, or the categories delivery, ride and navigation apps use. */
+    fun isProgress(raw: RawNotification): Boolean =
+        raw.template?.endsWith("ProgressStyle") == true ||
+            (raw.hasProgress && (raw.ongoing || raw.onlyAlertOnce)) ||
+            (raw.ongoing && raw.category in PROGRESS_CATEGORIES)
+
+    private fun callItem(raw: RawNotification): IslandItem {
+        val actions = raw.actions.filter { !it.isContextual && it.title.isNotBlank() }
+        val state = when (raw.callType) {
+            CALL_TYPE_INCOMING -> CallState.INCOMING
+            CALL_TYPE_SCREENING -> CallState.SCREENING
+            CALL_TYPE_ONGOING -> CallState.ONGOING
+            else -> when {
+                raw.chronometerBase != null -> CallState.ONGOING
+                actions.any { ANSWER.containsMatchIn(it.title) } -> CallState.INCOMING
+                else -> CallState.ONGOING
+            }
+        }
+        val caller = raw.title?.trim()?.takeIf { it.isNotEmpty() } ?: raw.appLabel
+        // CallStyle keeps answer/decline/hang-up as intents in extras; older dialers use actions.
+        val callActions = if (raw.callType != 0) {
+            buildList {
+                if (raw.callCanDecline) add(IslandAction(ActionRole.DECLINE_INDEX, "Decline", false, ActionRole.DECLINE))
+                if (raw.callCanAnswer) add(IslandAction(ActionRole.ANSWER_INDEX, "Answer", false, ActionRole.ANSWER))
+                if (raw.callCanHangUp) add(IslandAction(ActionRole.HANG_UP_INDEX, "Hang up", false, ActionRole.HANG_UP))
+            }
+        } else {
+            actions.take(MAX_ACTIONS).map { a ->
+                val role = when {
+                    ANSWER.containsMatchIn(a.title) -> ActionRole.ANSWER
+                    DECLINE.containsMatchIn(a.title) -> ActionRole.DECLINE
+                    HANG_UP.containsMatchIn(a.title) -> ActionRole.HANG_UP
+                    else -> ActionRole.NORMAL
+                }
+                IslandAction(a.index, a.title.trim(), isReply = false, role = role)
+            }
+        }
+        return baseItem(raw).copy(
+            kind = ItemKind.CALL,
+            title = caller,
+            glance = when (state) {
+                CallState.INCOMING -> "Incoming"
+                CallState.SCREENING -> "Screening"
+                CallState.ONGOING -> ""
+            },
+            lines = listOfNotNull(raw.text?.trim()?.takeIf { it.isNotEmpty() }?.let { MessageLine(null, it) }),
+            actions = callActions,
+            avatarKey = raw.largeIconKey,
+            live = LiveContent.Call(caller, state, raw.chronometerBase ?: raw.postTime),
+        )
+    }
+
+    private fun progressItem(raw: RawNotification): IslandItem {
+        val fraction = if (raw.progressIndeterminate || raw.progressMax <= 0) {
+            null
+        } else {
+            (raw.progress.toFloat() / raw.progressMax).coerceIn(0f, 1f)
+        }
+        val percent = fraction?.let { "${(it * 100).roundToInt()}%" }
+        val status = listOfNotNull(raw.text, raw.subText).map { it.trim() }.firstOrNull { it.isNotEmpty() } ?: percent.orEmpty()
+        val title = raw.title?.trim()?.takeIf { it.isNotEmpty() } ?: raw.appLabel
+        return baseItem(raw).copy(
+            kind = ItemKind.PROGRESS,
+            title = title,
+            glance = percent ?: status.takeIf { it.length <= 14 }.orEmpty(),
+            lines = listOfNotNull(status.takeIf { it.isNotEmpty() }?.let { MessageLine(null, it) }),
+            avatarKey = raw.largeIconKey,
+            live = LiveContent.Progress(fraction, status),
         )
     }
 
@@ -232,9 +321,19 @@ class NotificationParser(
 
         private val CONTENT_HIDDEN = Regex("""\bcontents? hidden\b""")
 
-        val LATER_PHASE_CATEGORIES = setOf(
-            "call", "transport", "progress", "service", "stopwatch", "navigation", "alarm", "sys",
-        )
+        /** System plumbing that never belongs on the island. */
+        val SYSTEM_CATEGORIES = setOf("service", "sys", "alarm", "stopwatch")
+
+        /** Ongoing notifications in these categories are deliveries, rides, navigation. */
+        val PROGRESS_CATEGORIES = setOf("progress", "navigation", "status", "location_sharing")
+
+        const val CALL_TYPE_INCOMING = 1
+        const val CALL_TYPE_ONGOING = 2
+        const val CALL_TYPE_SCREENING = 3
+
+        private val ANSWER = Regex("""(?i)\b(answer|accept|pick up)\b""")
+        private val DECLINE = Regex("""(?i)\b(decline|reject|dismiss|ignore)\b""")
+        private val HANG_UP = Regex("""(?i)\b(hang ?up|end( call)?|disconnect)\b""")
 
         private val LEADING_SYMBOLS = Regex("""^[^\p{L}\p{N}]+""")
         private val MEDIA_TEXT = Regex(
