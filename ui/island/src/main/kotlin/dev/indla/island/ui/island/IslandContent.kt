@@ -61,7 +61,6 @@ import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -326,10 +325,7 @@ private fun ExpandedContent(
                 item.live is LiveContent.Call -> CallBody(item, item.live as LiveContent.Call, registry)
                 item.live is LiveContent.Media -> MediaBody(item, item.live as LiveContent.Media, accent, registry)
                 item.live is LiveContent.Progress -> ProgressBody(item, item.live as LiveContent.Progress, accent, registry)
-                // Expanded glances keep moving until they collapse.
-                item.live is LiveContent.System -> CompositionLocalProvider(LocalLoopMotion provides true) {
-                    SystemBody(item, item.live as LiveContent.System, accent, registry)
-                }
+                item.live is LiveContent.System -> SystemBody(item, item.live as LiveContent.System, accent, registry)
                 item.live is LiveContent.Timer -> TimerBody(item, item.live as LiveContent.Timer, registry)
                 else -> NotificationBody(item, state.replyOpen, registry, drawReplyHint)
             }
@@ -775,6 +771,18 @@ private fun SystemBody(item: IslandItem, system: LiveContent.System, accent: Col
         return
     }
     val color = systemColor(system.event, accent)
+    if (hasScene(system.event)) {
+        // A little story across the card: words on the left, the scene on the right.
+        Row(Modifier.fillMaxWidth().height(IslandLayout.SYSTEM_ROW.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.width(112.dp)) {
+                Text(systemTitle(system.event), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text(system.label, color = color, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.width(8.dp))
+            SystemScene(system.event, system.level, color, Modifier.weight(1f).fillMaxHeight())
+        }
+        return
+    }
     val reveal = rememberReveal()
     Row(Modifier.fillMaxWidth().height(IslandLayout.SYSTEM_ROW.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {

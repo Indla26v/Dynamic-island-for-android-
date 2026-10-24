@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
-import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -194,48 +193,23 @@ fun rememberTicker(running: Boolean): State<Long> {
 @Composable
 fun rememberReveal(durationMs: Int = 900): Float {
     val frozen = LocalFrozenTime.current != null
-    val loop = LocalLoopMotion.current
     val reveal = remember { Animatable(if (frozen) 1f else 0f) }
-    LaunchedEffect(loop) {
-        if (frozen) return@LaunchedEffect
-        do {
-            if (reveal.value >= 1f) {
-                delay(LOOP_PAUSE_MS)
-                reveal.snapTo(0f)
-            }
-            reveal.animateTo(1f, tween(durationMs, easing = FastOutSlowInEasing))
-        } while (loop)
-    }
+    LaunchedEffect(Unit) { reveal.animateTo(1f, tween(durationMs, easing = FastOutSlowInEasing)) }
     return reveal.value
 }
 
-/**
- * True inside an expanded card: one-shot motions (the plane flying in, arcs lighting up) play
- * again and again until the card collapses, instead of once.
- */
-val LocalLoopMotion = compositionLocalOf { false }
-
-/** A spring from [from] to [to] once, or on repeat inside an expanded card. */
+/** A spring from [from] to [to], once, after [delayMs]. */
 @Composable
 fun rememberSpringIn(from: Float, to: Float, dampingRatio: Float, stiffness: Float, delayMs: Long = 0): Float {
     val frozen = LocalFrozenTime.current != null
-    val loop = LocalLoopMotion.current
     val value = remember { Animatable(if (frozen) to else from) }
-    LaunchedEffect(loop) {
+    LaunchedEffect(Unit) {
         if (frozen) return@LaunchedEffect
-        do {
-            if (value.value == to) {
-                delay(LOOP_PAUSE_MS)
-                value.snapTo(from)
-            }
-            delay(delayMs)
-            value.animateTo(to, spring(dampingRatio = dampingRatio, stiffness = stiffness))
-        } while (loop)
+        delay(delayMs)
+        value.animateTo(to, spring(dampingRatio = dampingRatio, stiffness = stiffness))
     }
     return value.value
 }
-
-private const val LOOP_PAUSE_MS = 700L
 
 /** Like the Recorder app: recorded bars scroll left past a red playhead; ahead of it, dots. */
 @Composable

@@ -98,6 +98,9 @@ class SettingsViewModel @Inject constructor(
     fun tryModes() {
         appScope.launch(Dispatchers.Main) {
             listOf(
+                LiveContent.System(SystemEvent.CHARGING, 62, "62%"),
+                LiveContent.System(SystemEvent.UNPLUGGED, 64, "64%"),
+                LiveContent.System(SystemEvent.BATTERY_LOW, 12, "12%"),
                 LiveContent.System(SystemEvent.RINGER_SILENT, null, "Sounds off"),
                 LiveContent.System(SystemEvent.RINGER_VIBRATE, null, "Vibrate only"),
                 LiveContent.System(SystemEvent.RINGER_NORMAL, null, "Sound on"),
@@ -106,6 +109,7 @@ class SettingsViewModel @Inject constructor(
                 LiveContent.System(SystemEvent.SAVER_ON, 62, "On · 62%"),
                 LiveContent.System(SystemEvent.MONSTER_ON, null, "On"),
                 LiveContent.System(SystemEvent.DARK_MODE, null, "On"),
+                LiveContent.System(SystemEvent.LIGHT_MODE, null, "On"),
                 LiveContent.System(SystemEvent.WIFI_CONNECTED, null, "Connected"),
                 LiveContent.System(SystemEvent.CLIPBOARD, null, "Meet at 7, Café Coffee Day, 100 Ft Rd"),
                 LiveContent.System(SystemEvent.LOCATION_ON, null, "On"),

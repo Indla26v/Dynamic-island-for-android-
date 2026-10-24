@@ -344,12 +344,13 @@ class IslandEngine(
         if (existing >= 0) removeAt(existing)
         // Headphones connecting open up briefly to show the pair and its battery, then leave.
         // Opened by default: the pair and its battery, the plane flying in, the moon swinging in.
-        // Unlocking happens many times a day: that one stays a small glance.
-        val showcase = event.event != SystemEvent.UNLOCKED && event.event != SystemEvent.AUTH_FAILED
+        val showcase = true
+        // Unlocking happens many times a day: open, but only briefly.
+        val shown = if (event.event == SystemEvent.UNLOCKED || event.event == SystemEvent.AUTH_FAILED) BRIEF_SHOWCASE_MS else SHOWCASE_MS
         // The flashlight stays on the island, with a button to turn it off, until it's off.
-        val expires = if (event.event == SystemEvent.FLASHLIGHT_ON) FOREVER else clock() + if (showcase) SHOWCASE_MS else SYSTEM_EVENT_MS
+        val expires = if (event.event == SystemEvent.FLASHLIGHT_ON) FOREVER else clock() + shown
         insert(Active(item, expires, selfTest = false), autoExpand = showcase && !busy())
-        if (showcase && expanded) expandedDeadline = clock() + SHOWCASE_MS
+        if (showcase && expanded) expandedDeadline = clock() + shown
         publish()
     }
 
@@ -918,6 +919,7 @@ class IslandEngine(
         const val SYSTEM_EVENT_MS = 3_000L
         /** How long the headphones card stays open. */
         const val SHOWCASE_MS = 6_000L
+        const val BRIEF_SHOWCASE_MS = 2_500L
         /** How long paused media stays before it leaves the island. */
         const val LIVE_LINGER_MS = 10_000L
         const val MAX_ITEMS = 5

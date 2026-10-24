@@ -19,6 +19,7 @@ internal class BiometricWatcher(context: Context, private val emit: (LiveContent
     private val hasFingerprint = context.packageManager.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)
     private var lastFace: Boolean? = null
     private var lastSaidAt = 0L
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
 
     fun onAnnouncement(event: AccessibilityEvent) {
         if (event.packageName?.toString() != SYSTEM_UI) return
@@ -33,15 +34,22 @@ internal class BiometricWatcher(context: Context, private val emit: (LiveContent
         }
     }
 
+    /**
+     * USER_PRESENT arrives while the lock screen is still leaving and the window list is in flux;
+     * a glance raised then can be dropped or covered. Show it once the screen has settled.
+     */
     fun onUnlocked() {
         val recent = SystemClock.uptimeMillis() - lastSaidAt < RECENT_MS
         val face = if (recent) lastFace == true else hasFace && !hasFingerprint
-        emit(LiveContent.System(SystemEvent.UNLOCKED, if (face) FACE else 0, if (face) "Face" else if (hasFingerprint || !hasFace) "Fingerprint" else "Unlocked"))
+        val glance = LiveContent.System(SystemEvent.UNLOCKED, if (face) FACE else 0, if (face) "Face" else if (hasFingerprint || !hasFace) "Fingerprint" else "Unlocked")
+        handler.removeCallbacksAndMessages(null)
+        handler.postDelayed({ emit(glance) }, SETTLE_MS)
     }
 
     private companion object {
         const val SYSTEM_UI = "com.android.systemui"
         const val RECENT_MS = 15_000L
+        const val SETTLE_MS = 600L
         val FACE_WORDS = Regex("""(?i)\bface\b""")
         val FINGER_WORDS = Regex("""(?i)fingerprint""")
         val FAILED = Regex("""(?i)not recogni[sz]ed|try again|no match|couldn.?t recogni|didn.?t recogni|failed""")

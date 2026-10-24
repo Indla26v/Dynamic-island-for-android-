@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
@@ -97,13 +98,8 @@ internal fun SystemGlyph(event: SystemEvent, color: Color, size: Dp, level: Int?
             scaleY = s
             alpha = 1f - 0.4f * p
         }
-        SystemEvent.DARK_MODE -> DarkIn(color, size)
-        SystemEvent.LIGHT_MODE -> IconGlyph(Icons.Rounded.LightMode, color, size) { p ->
-            rotationZ = 180f * p
-            val s = 0.4f + 0.6f * p
-            scaleX = s
-            scaleY = s
-        }
+        SystemEvent.DARK_MODE -> Horizon(color, size, night = true)
+        SystemEvent.LIGHT_MODE -> Horizon(color, size, night = false)
         SystemEvent.WIFI_CONNECTED -> WifiArcs(color, size, connected = true)
         SystemEvent.WIFI_DISCONNECTED -> WifiArcs(color, size, connected = false)
         SystemEvent.CLIPBOARD -> Clipboard(color, size)
@@ -388,30 +384,43 @@ private fun MonsterFlare(color: Color, size: Dp) {
     }
 }
 
-/** The moon swings in and two stars twinkle beside it. */
+/**
+ * Sunset into dark mode: the sun sinks below the horizon as the moon rises, and stars come out.
+ * In reverse for light mode: the moon sets, the sun comes up and its rays turn.
+ */
 @Composable
-private fun DarkIn(color: Color, size: Dp) {
-    val p = rememberReveal(1_300)
-    val now by rememberTicker(true)
-    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
-        Icon(
-            Icons.Rounded.DarkMode,
-            null,
-            tint = color,
-            modifier = Modifier.size(size).graphicsLayer {
-                rotationZ = -120f * (1f - p)
-                val s = 0.4f + 0.6f * p
-                scaleX = s
-                scaleY = s
-            },
-        )
+private fun Horizon(color: Color, size: Dp, night: Boolean) {
+    val p = rememberReveal(1_600)
+    val now by rememberTicker(night)
+    Box(Modifier.size(size)) {
         Canvas(Modifier.size(size)) {
-            val t = (now % 1_400) / 1_400f
-            listOf(Offset(0.86f, 0.14f) to 0f, Offset(0.72f, 0.02f) to 0.5f).forEach { (at, phase) ->
-                val a = p * (0.4f + 0.6f * ((sin(((t + phase) * 2 * PI)).toFloat() + 1f) / 2f))
-                drawCircle(Color.White.copy(alpha = a), this.size.minDimension * 0.05f, Offset(this.size.width * at.x, this.size.height * at.y))
+            val horizon = this.size.height * 0.86f
+            val r = this.size.minDimension * 0.2f
+            val sink = if (night) p else 1f - p
+            // The sun, going down (night) or coming up (day).
+            val sunY = horizon - r * 1.3f + (r * 3f) * sink
+            clipRect(bottom = horizon) {
+                drawCircle(SaverYellow.copy(alpha = 1f - 0.5f * sink), r, Offset(this.size.width * 0.32f, sunY))
+            }
+            drawLine(Color.White.copy(alpha = 0.5f), Offset(this.size.width * 0.05f, horizon), Offset(this.size.width * 0.95f, horizon), 1.2.dp.toPx(), StrokeCap.Round)
+            if (night && p > 0.6f) {
+                val t = (now % 1_400) / 1_400f
+                val a = ((p - 0.6f) / 0.4f) * (0.4f + 0.6f * ((sin(t * 2 * PI).toFloat() + 1f) / 2f))
+                drawCircle(Color.White.copy(alpha = a), this.size.minDimension * 0.04f, Offset(this.size.width * 0.12f, this.size.height * 0.15f))
+                drawCircle(Color.White.copy(alpha = a * 0.7f), this.size.minDimension * 0.03f, Offset(this.size.width * 0.3f, this.size.height * 0.05f))
             }
         }
+        val rise = if (night) p else 1f - p
+        Icon(
+            if (night) Icons.Rounded.DarkMode else Icons.Rounded.LightMode,
+            null,
+            tint = color,
+            modifier = Modifier.align(Alignment.TopEnd).size(size * 0.62f).graphicsLayer {
+                translationY = size.toPx() * 0.5f * (1f - (if (night) rise else 1f - rise))
+                alpha = if (night) rise else 1f
+                rotationZ = if (night) -30f * (1f - p) else 180f * p
+            },
+        )
     }
 }
 
@@ -452,8 +461,18 @@ private fun WifiArcs(color: Color, size: Dp, connected: Boolean) {
 @Composable
 private fun Clipboard(color: Color, size: Dp) {
     val tick = rememberSpringIn(0f, 1f, 0.45f, Spring.StiffnessMediumLow, delayMs = 180)
+    val fly = rememberReveal(500)
     Box(Modifier.size(size)) {
         Icon(Icons.Rounded.ContentPaste, null, tint = color, modifier = Modifier.size(size))
+        // The copied text, as a little card, flies onto the clipboard.
+        Canvas(Modifier.size(size)) {
+            if (fly < 1f) {
+                val w = this.size.width * (0.5f - 0.15f * fly)
+                val x = this.size.width * (-0.6f + 0.85f * fly)
+                val y = this.size.height * (-0.3f + 0.7f * fly)
+                drawRoundRect(Color.White.copy(alpha = 1f - fly * 0.6f), Offset(x, y), Size(w, w * 0.62f), CornerRadius(w * 0.12f))
+            }
+        }
         Box(
             Modifier
                 .align(Alignment.BottomEnd)
