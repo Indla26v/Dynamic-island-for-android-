@@ -25,7 +25,7 @@ class ContactPhotos @Inject constructor(
     private val icons: IconStore,
 ) {
     /** name-or-number -> icon key, or "" when the contact has no photo (so we don't ask again). */
-    private val cache = HashMap<String, String>()
+    private val cache: MutableMap<String, String> = java.util.Collections.synchronizedMap(HashMap())
 
     fun granted() = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
 

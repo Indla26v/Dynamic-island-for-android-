@@ -102,6 +102,7 @@ class IslandAccessibilityService : AccessibilityService() {
     private var shadeFromEvents = false
     private var blurJob: Job? = null
     private var windowsJob: Job? = null
+    private var boostJob: Job? = null
     private var blur: BlurWindow? = null
     private var systemEvents: SystemEventMonitor? = null
     private val controls by lazy { ControlPress(this, scope) }
@@ -316,6 +317,7 @@ class IslandAccessibilityService : AccessibilityService() {
         val content = listOf(state.mode, state.current?.key, state.replyOpen, state.quickActionsOpen, state.visible)
         if (content != lastContent) {
             lastContent = content
+            boostRefreshRate()
             OverlayFrameStats.track(refreshRate())
             updateBlur(state, layout, m)
         }
@@ -443,9 +445,34 @@ class IslandAccessibilityService : AccessibilityService() {
         onReplyCancel = { engine.onReplyCancelled() },
         onScrub = { down ->
             if (down) hitHost?.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            boostRefreshRate()
             engine.onHold(down)
         },
     )
+
+    /**
+     * 90/120 Hz screens run the overlay at the panel's top rate only while the island moves, and
+     * leave the choice to the system the rest of the time, so a resting island costs nothing extra.
+     */
+    private fun boostRefreshRate() {
+        val view = renderView ?: return
+        if (maxRefreshRate <= 61f) return
+        if (renderParams.preferredRefreshRate != maxRefreshRate) {
+            renderParams.preferredRefreshRate = maxRefreshRate
+            runCatching { windowManager.updateViewLayout(view, renderParams) }
+        }
+        boostJob?.cancel()
+        boostJob = scope.launch {
+            delay(BOOST_MS)
+            renderParams.preferredRefreshRate = 0f
+            runCatching { windowManager.updateViewLayout(view, renderParams) }
+        }
+    }
+
+    private val maxRefreshRate: Float by lazy {
+        getSystemService(android.hardware.display.DisplayManager::class.java)
+            ?.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.supportedModes?.maxOfOrNull { it.refreshRate } ?: 60f
+    }
 
     /** A service has no display of its own; ask DisplayManager for the default one. */
     private fun refreshRate(): Float = getSystemService(android.hardware.display.DisplayManager::class.java)
@@ -557,6 +584,8 @@ class IslandAccessibilityService : AccessibilityService() {
         private const val TAG = "IslandOverlay"
         private const val BLUR_SETTLE_MS = 320L
         private const val WINDOWS_COALESCE_MS = 48L
+        /** Long enough for the morph spring and the content fade to finish. */
+        private const val BOOST_MS = 900L
         private const val BLUR_RADIUS_DP = 28f
 
         /** `adb shell setprop log.tag.IslandOverlay DEBUG` turns on detection logging. */

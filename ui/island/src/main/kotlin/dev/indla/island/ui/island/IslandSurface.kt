@@ -2,6 +2,7 @@ package dev.indla.island.ui.island
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector4D
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.TwoWayConverter
 import androidx.compose.animation.core.animateFloatAsState
@@ -48,10 +49,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Damping ~0.8 and low-medium stiffness: settles without bounce-back. */
-private val MorphSpring = spring<IslandRect>(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)
+/** Growing overshoots a touch, like the real island; shrinking settles without a bounce. */
+private val GrowSpring = spring<IslandRect>(dampingRatio = 0.74f, stiffness = 420f)
+private val ShrinkSpring = spring<IslandRect>(dampingRatio = 0.92f, stiffness = 520f)
 private const val FADE_OUT_MS = 90
-private const val CONTENT_DELAY_MS = 80L
-private const val FADE_IN_MS = 170
+private const val CONTENT_DELAY_MS = 70L
+private const val FADE_IN_MS = 200
+/** New content settles in from slightly smaller while it fades in. */
+private const val CONTENT_START_SCALE = 0.94f
 private const val SLIDE_DP = 28f
 
 /** The cards behind a stacked island: lighter the further back, so the layers read on black. */
@@ -89,6 +94,7 @@ fun IslandSurface(
     val contentAlpha = remember { Animatable(1f) }
     /** Horizontal slide (dp) of content when the island switches to another item. */
     val contentShift = remember { Animatable(0f) }
+    val contentScale = remember { Animatable(1f) }
     /** A short spring "pop" of the whole island when something new arrives. */
     val pulse = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
@@ -101,7 +107,7 @@ fun IslandSurface(
         val shrinking = target.width * target.height < shape.value.width * shape.value.height - 1f
         if (changed && shrinking) contentAlpha.animateTo(0f, tween(FADE_OUT_MS))
         // Launched outside this effect so a retarget keeps the running spring's velocity.
-        scope.launch { shape.animateTo(target, MorphSpring) }
+        scope.launch { shape.animateTo(target, if (shrinking) ShrinkSpring else GrowSpring) }
         if (changed) {
             // Same state, different item (a swipe, or the island returning to a live activity):
             // the new content slides in from the side instead of only fading.
@@ -122,8 +128,11 @@ fun IslandSurface(
             if (switching) {
                 contentShift.snapTo(if (forward) SLIDE_DP else -SLIDE_DP)
                 launch { contentShift.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) }
+            } else {
+                contentScale.snapTo(CONTENT_START_SCALE)
+                launch { contentScale.animateTo(1f, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)) }
             }
-            contentAlpha.animateTo(1f, tween(FADE_IN_MS))
+            contentAlpha.animateTo(1f, tween(FADE_IN_MS, easing = LinearOutSlowInEasing))
         } else {
             shown = latest
             if (contentAlpha.value < 1f) contentAlpha.animateTo(1f, tween(FADE_IN_MS))
@@ -243,7 +252,18 @@ fun IslandSurface(
                     clip = true
                 },
         ) {
-            Box(Modifier.fillMaxSize().graphicsLayer { translationX = contentShift.value.dp.toPx() }) {
+            Box(
+                Modifier.fillMaxSize().graphicsLayer {
+                    translationX = contentShift.value.dp.toPx()
+                    scaleX = contentScale.value
+                    scaleY = contentScale.value
+                    // Settle in toward the camera, where the shape grows from.
+                    transformOrigin = TransformOrigin(
+                        (layout.centerX.dp.toPx() / size.width).coerceIn(0f, 1f),
+                        (layout.top.dp.toPx() / size.height).coerceIn(0f, 1f),
+                    )
+                },
+            ) {
                 Box(
                     Modifier
                         .offset(shownRect.left.dp, shownRect.top.dp)

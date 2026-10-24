@@ -14,8 +14,9 @@ import javax.inject.Singleton
 class AppInfoCache @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    private val labels = HashMap<String, String>()
-    private val accents = HashMap<String, Long?>()
+    // Read from the notification reader thread and the main thread.
+    private val labels: MutableMap<String, String> = java.util.Collections.synchronizedMap(HashMap())
+    private val accents: MutableMap<String, Long?> = java.util.Collections.synchronizedMap(HashMap())
 
     fun label(pkg: String): String = labels.getOrPut(pkg) {
         runCatching {
