@@ -3,7 +3,10 @@
   Honest declaration: Island is not an accessibility tool. It uses the API to draw over the
   status bar, and to list which windows are on screen (is the status bar showing, is the shade
   open, which app is in front). canRetrieveWindowContent is what Android requires for that window
-  list; Island never reads the content of any window.
+  list. Content is read in exactly two user-started cases: when the user taps the island's
+  play/pause or stop for an app that offers no controls, Island finds and presses that app's own
+  button; and with the Clipboard glance on, it reads the text the user selected when they tap
+  Copy, to show what was copied. Text events are subscribed to only while that glance is on.
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged|typeWindowsChanged"

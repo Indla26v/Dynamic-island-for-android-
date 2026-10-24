@@ -23,13 +23,23 @@ object OverlayKeeper {
     private const val KEY_DROPS = "overlay_drops"
     private const val KEY_DROP_SEEN = "overlay_drop_seen"
     private const val KEY_TIPS_HIDDEN = "overlay_tips_hidden"
+    private const val KEY_NOTICE = "overlay_notice_shown"
     private const val TAG = "OverlayKeeper"
+    /** The "Island was switched off" notification. */
+    const val NOTICE_ID = 7_100
 
     fun component(context: Context) = ComponentName(context.packageName, SERVICE)
 
     /** Called by the service once it is up: from now on, "off" means the system dropped it. */
     fun markRunning(context: Context) {
-        prefs(context).edit().putBoolean(KEY_WAS_ON, true).apply()
+        prefs(context).edit().putBoolean(KEY_WAS_ON, true).putBoolean(KEY_NOTICE, false).apply()
+        context.getSystemService(android.app.NotificationManager::class.java)?.cancel(NOTICE_ID)
+    }
+
+    fun noticeShown(context: Context) = prefs(context).getBoolean(KEY_NOTICE, false)
+
+    fun setNoticeShown(context: Context, shown: Boolean) {
+        prefs(context).edit().putBoolean(KEY_NOTICE, shown).apply()
     }
 
     fun wasOn(context: Context) = prefs(context).getBoolean(KEY_WAS_ON, false)

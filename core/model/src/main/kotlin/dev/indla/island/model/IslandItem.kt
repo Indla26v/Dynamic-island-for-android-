@@ -188,6 +188,20 @@ enum class SystemEvent {
     RINGER_SILENT,
     HEADPHONES_CONNECTED,
     HEADPHONES_DISCONNECTED,
+    AIRPLANE_ON,
+    AIRPLANE_OFF,
+    FLASHLIGHT_ON,
+    FLASHLIGHT_OFF,
+    SAVER_ON,
+    SAVER_OFF,
+    /** vivo / iQOO performance mode. */
+    MONSTER_ON,
+    MONSTER_OFF,
+    DARK_MODE,
+    LIGHT_MODE,
+    WIFI_CONNECTED,
+    WIFI_DISCONNECTED,
+    CLIPBOARD,
 }
 
 /** A media session as the listener sees it; the engine turns it into a MEDIA item. */

@@ -1,0 +1,392 @@
+package dev.indla.island.ui.island
+
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AirplanemodeActive
+import androidx.compose.material.icons.rounded.AirplanemodeInactive
+import androidx.compose.material.icons.rounded.BatteryAlert
+import androidx.compose.material.icons.rounded.BatteryStd
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ContentPaste
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.FlashlightOff
+import androidx.compose.material.icons.rounded.FlashlightOn
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.NotificationsOff
+import androidx.compose.material.icons.rounded.Vibration
+import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import dev.indla.island.model.SystemEvent
+import kotlin.math.PI
+import kotlin.math.sin
+
+// ---- System glances --------------------------------------------------------------------------
+// Each mode change has its own short motion, in the spirit of iOS: the plane flies in, the
+// torch throws a glow, the battery fills, Monster mode flares, the sun spins into the moon,
+// Wi-Fi arcs light up one by one, the clipboard gets a tick. All finish within about a second,
+// except the torch's glow and Monster's flicker, which last only while the glance is shown.
+
+val AirplaneOrange = Color(0xFFFF9F0A)
+val SaverYellow = Color(0xFFFFD60A)
+val NightIndigo = Color(0xFF5E5CE6)
+val WifiBlue = Color(0xFF0A84FF)
+val ClipTeal = Color(0xFF64D2FF)
+val MonsterRed = Color(0xFFFF3B30)
+private val TorchWarm = Color(0xFFFFE9A8)
+
+@Composable
+internal fun SystemGlyph(event: SystemEvent, color: Color, size: Dp, level: Int? = null) {
+    when (event) {
+        SystemEvent.AIRPLANE_ON -> AirplaneIn(color, size)
+        SystemEvent.AIRPLANE_OFF -> IconGlyph(Icons.Rounded.AirplanemodeInactive, color, size) { p ->
+            translationY = size.toPx() * 0.12f * p
+            alpha = 1f - 0.3f * p
+        }
+        SystemEvent.FLASHLIGHT_ON -> Torch(on = true, color, size)
+        SystemEvent.FLASHLIGHT_OFF -> Torch(on = false, color, size)
+        SystemEvent.SAVER_ON, SystemEvent.SAVER_OFF -> BatteryFill(level ?: 50, color, size)
+        SystemEvent.MONSTER_ON -> MonsterFlare(color, size)
+        SystemEvent.MONSTER_OFF -> IconGlyph(Icons.Rounded.LocalFireDepartment, color, size) { p ->
+            val s = 1f - 0.25f * p
+            scaleX = s
+            scaleY = s
+            alpha = 1f - 0.4f * p
+        }
+        SystemEvent.DARK_MODE -> DarkIn(color, size)
+        SystemEvent.LIGHT_MODE -> IconGlyph(Icons.Rounded.LightMode, color, size) { p ->
+            rotationZ = 180f * p
+            val s = 0.4f + 0.6f * p
+            scaleX = s
+            scaleY = s
+        }
+        SystemEvent.WIFI_CONNECTED -> WifiArcs(color, size, connected = true)
+        SystemEvent.WIFI_DISCONNECTED -> WifiArcs(color, size, connected = false)
+        SystemEvent.CLIPBOARD -> Clipboard(color, size)
+        SystemEvent.RINGER_SILENT -> SilentBell(color, size)
+        else -> LegacyGlyph(event, color, size)
+    }
+}
+
+/** An icon with a one-shot motion driven by [transform] over progress 0..1. */
+@Composable
+private fun IconGlyph(icon: ImageVector, color: Color, size: Dp, durationMs: Int = 700, transform: androidx.compose.ui.graphics.GraphicsLayerScope.(Float) -> Unit) {
+    val p = rememberReveal(durationMs)
+    Icon(icon, null, tint = color, modifier = Modifier.size(size).graphicsLayer { transform(p) })
+}
+
+/** The plane glides in from the left, leaving two fading contrails. */
+@Composable
+private fun AirplaneIn(color: Color, size: Dp) {
+    val p = rememberReveal(850)
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(size)) {
+            val trail = (1f - p) * this.size.width * 0.9f
+            if (trail > 1f) {
+                for (dy in listOf(-0.12f, 0.12f)) {
+                    val y = this.size.height * (0.5f + dy)
+                    drawLine(
+                        Brush.horizontalGradient(listOf(Color.Transparent, color.copy(alpha = 0.55f)), startX = -trail, endX = this.size.width * 0.3f),
+                        Offset(-trail, y),
+                        Offset(this.size.width * 0.3f, y),
+                        strokeWidth = 1.5.dp.toPx(),
+                        cap = StrokeCap.Round,
+                    )
+                }
+            }
+        }
+        Icon(
+            Icons.Rounded.AirplanemodeActive,
+            null,
+            tint = color,
+            modifier = Modifier.size(size).graphicsLayer {
+                translationX = -size.toPx() * 1.1f * (1f - p)
+                rotationZ = 90f - 12f * (1f - p)
+                alpha = p.coerceAtLeast(0.15f)
+            },
+        )
+    }
+}
+
+/** On: a warm glow blooms behind the torch and breathes. Off: the glow folds away. */
+@Composable
+private fun Torch(on: Boolean, color: Color, size: Dp) {
+    val p = rememberReveal(600)
+    val now by rememberTicker(on)
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(size * 1.6f)) {
+            val breathe = if (on) 0.85f + 0.15f * sin((now % 1_600) / 1_600f * 2 * PI).toFloat() else 1f
+            val strength = if (on) p * breathe else 1f - p
+            if (strength > 0.01f) {
+                drawCircle(
+                    Brush.radialGradient(listOf(TorchWarm.copy(alpha = 0.55f * strength), Color.Transparent), radius = this.size.minDimension / 2),
+                    radius = this.size.minDimension / 2,
+                )
+            }
+        }
+        Icon(if (on) Icons.Rounded.FlashlightOn else Icons.Rounded.FlashlightOff, null, tint = color, modifier = Modifier.size(size))
+    }
+}
+
+/** A battery drawn in place, filling up to the level: yellow for the saver, green when it's off. */
+@Composable
+private fun BatteryFill(level: Int, color: Color, size: Dp) {
+    val p = rememberReveal(900)
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width * 0.82f
+        val h = this.size.height * 0.46f
+        val left = (this.size.width - w) / 2 - this.size.width * 0.04f
+        val top = (this.size.height - h) / 2
+        val stroke = 1.6.dp.toPx()
+        val r = h * 0.3f
+        drawRoundRect(color.copy(alpha = 0.9f), Offset(left, top), Size(w, h), CornerRadius(r), style = Stroke(stroke))
+        drawRoundRect(color.copy(alpha = 0.9f), Offset(left + w + stroke, top + h * 0.3f), Size(stroke * 1.4f, h * 0.4f), CornerRadius(stroke))
+        val inset = stroke * 1.8f
+        val fill = (w - 2 * inset) * (level.coerceIn(0, 100) / 100f) * p
+        if (fill > 0f) {
+            drawRoundRect(color, Offset(left + inset, top + inset), Size(fill, h - 2 * inset), CornerRadius(r * 0.6f))
+        }
+    }
+}
+
+/** Monster mode: the flame pops with an overshoot, then flickers over a red glow. */
+@Composable
+private fun MonsterFlare(color: Color, size: Dp) {
+    val pop = remember { Animatable(0.3f) }
+    LaunchedEffect(Unit) { pop.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium)) }
+    val now by rememberTicker(true)
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(size * 1.5f)) {
+            val flicker = 0.75f + 0.25f * sin((now % 300) / 300f * 2 * PI).toFloat()
+            drawCircle(
+                Brush.radialGradient(listOf(MonsterRed.copy(alpha = 0.45f * flicker), Color.Transparent), radius = this.size.minDimension / 2),
+                radius = this.size.minDimension / 2,
+            )
+        }
+        Icon(
+            Icons.Rounded.LocalFireDepartment,
+            null,
+            tint = color,
+            modifier = Modifier.size(size).graphicsLayer {
+                val jitter = 1f + 0.04f * sin((now % 180) / 180f * 2 * PI).toFloat()
+                scaleX = pop.value * jitter
+                scaleY = pop.value * jitter
+                transformOrigin = TransformOrigin(0.5f, 0.9f)
+            },
+        )
+    }
+}
+
+/** The moon swings in and two stars twinkle beside it. */
+@Composable
+private fun DarkIn(color: Color, size: Dp) {
+    val p = rememberReveal(800)
+    val now by rememberTicker(true)
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        Icon(
+            Icons.Rounded.DarkMode,
+            null,
+            tint = color,
+            modifier = Modifier.size(size).graphicsLayer {
+                rotationZ = -120f * (1f - p)
+                val s = 0.4f + 0.6f * p
+                scaleX = s
+                scaleY = s
+            },
+        )
+        Canvas(Modifier.size(size)) {
+            val t = (now % 1_400) / 1_400f
+            listOf(Offset(0.86f, 0.14f) to 0f, Offset(0.72f, 0.02f) to 0.5f).forEach { (at, phase) ->
+                val a = p * (0.4f + 0.6f * ((sin(((t + phase) * 2 * PI)).toFloat() + 1f) / 2f))
+                drawCircle(Color.White.copy(alpha = a), this.size.minDimension * 0.05f, Offset(this.size.width * at.x, this.size.height * at.y))
+            }
+        }
+    }
+}
+
+/** Wi-Fi arcs light up from the dot outwards; disconnecting dims them from the outside in. */
+@Composable
+private fun WifiArcs(color: Color, size: Dp, connected: Boolean) {
+    val p = rememberReveal(900)
+    Canvas(Modifier.size(size)) {
+        val cx = this.size.width / 2
+        val base = this.size.height * 0.82f
+        val stroke = this.size.minDimension * 0.1f
+        fun lit(i: Int): Float {
+            // i = 0 is the dot, 3 the outer arc.
+            val step = if (connected) (p * 4 - i).coerceIn(0f, 1f) else (1f - (p * 4 - (3 - i))).coerceIn(0f, 1f)
+            return 0.2f + 0.8f * step
+        }
+        drawCircle(color.copy(alpha = lit(0)), stroke * 0.75f, Offset(cx, base))
+        for (i in 1..3) {
+            val r = this.size.minDimension * (0.2f + 0.2f * i)
+            drawArc(
+                color.copy(alpha = lit(i)),
+                startAngle = 225f,
+                sweepAngle = 90f,
+                useCenter = false,
+                topLeft = Offset(cx - r, base - r),
+                size = Size(2 * r, 2 * r),
+                style = Stroke(stroke, cap = StrokeCap.Round),
+            )
+        }
+        if (!connected && p > 0.6f) {
+            val q = ((p - 0.6f) / 0.4f).coerceIn(0f, 1f)
+            drawLine(color, Offset(this.size.width * 0.2f, this.size.height * 0.2f), Offset(this.size.width * (0.2f + 0.6f * q), this.size.height * (0.2f + 0.6f * q)), stroke * 0.8f, StrokeCap.Round)
+        }
+    }
+}
+
+/** The clipboard, and a green tick that springs onto its corner. */
+@Composable
+private fun Clipboard(color: Color, size: Dp) {
+    val tick = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(180)
+        tick.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow))
+    }
+    Box(Modifier.size(size)) {
+        Icon(Icons.Rounded.ContentPaste, null, tint = color, modifier = Modifier.size(size))
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .offset(size * 0.12f, size * 0.12f)
+                .size(size * 0.5f)
+                .graphicsLayer {
+                    scaleX = tick.value
+                    scaleY = tick.value
+                }
+                .clip(CircleShape)
+                .background(CallGreen),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Rounded.Check, null, tint = Color.Black, modifier = Modifier.size(size * 0.36f)) }
+    }
+}
+
+/** Like iOS: the bell rings once, then falls silent with a slash. */
+@Composable
+private fun SilentBell(color: Color, size: Dp) {
+    val p = rememberReveal(1_000)
+    val swing = sin(p * 6 * PI).toFloat() * (1f - p) * 20f
+    Icon(
+        if (p < 0.55f) Icons.Rounded.NotificationsActive else Icons.Rounded.NotificationsOff,
+        null,
+        tint = color,
+        modifier = Modifier.size(size).graphicsLayer {
+            rotationZ = swing
+            transformOrigin = TransformOrigin(0.5f, 0.1f)
+        },
+    )
+}
+
+/** The earlier glances: bell swings, phone buzzes, bolt pops, headphones nod. */
+@Composable
+private fun LegacyGlyph(event: SystemEvent, color: Color, size: Dp) {
+    val shake = rememberShake()
+    val flash = rememberReveal(700)
+    Icon(
+        systemIcon(event),
+        null,
+        tint = color,
+        modifier = Modifier.size(size).graphicsLayer {
+            when (event) {
+                SystemEvent.RINGER_NORMAL -> {
+                    rotationZ = 22f * shake
+                    transformOrigin = TransformOrigin(0.5f, 0.1f)
+                }
+                SystemEvent.RINGER_VIBRATE -> translationX = 3.dp.toPx() * sin(flash * 18 * PI).toFloat() * (1f - flash)
+                SystemEvent.CHARGING -> {
+                    val pop = 1f + 0.35f * sin(flash * PI).toFloat()
+                    scaleX = pop
+                    scaleY = pop
+                }
+                SystemEvent.HEADPHONES_CONNECTED, SystemEvent.HEADPHONES_DISCONNECTED -> rotationZ = 10f * shake
+                else -> Unit
+            }
+        },
+    )
+}
+
+internal fun systemIcon(event: SystemEvent): ImageVector = when (event) {
+    SystemEvent.CHARGING -> Icons.Rounded.Bolt
+    SystemEvent.UNPLUGGED -> Icons.Rounded.BatteryStd
+    SystemEvent.BATTERY_LOW -> Icons.Rounded.BatteryAlert
+    SystemEvent.RINGER_NORMAL -> Icons.Rounded.NotificationsActive
+    SystemEvent.RINGER_VIBRATE -> Icons.Rounded.Vibration
+    SystemEvent.RINGER_SILENT -> Icons.Rounded.NotificationsOff
+    SystemEvent.HEADPHONES_CONNECTED, SystemEvent.HEADPHONES_DISCONNECTED -> Icons.Rounded.Headphones
+    SystemEvent.AIRPLANE_ON -> Icons.Rounded.AirplanemodeActive
+    SystemEvent.AIRPLANE_OFF -> Icons.Rounded.AirplanemodeInactive
+    SystemEvent.FLASHLIGHT_ON -> Icons.Rounded.FlashlightOn
+    SystemEvent.FLASHLIGHT_OFF -> Icons.Rounded.FlashlightOff
+    SystemEvent.SAVER_ON, SystemEvent.SAVER_OFF -> Icons.Rounded.BatteryStd
+    SystemEvent.MONSTER_ON, SystemEvent.MONSTER_OFF -> Icons.Rounded.LocalFireDepartment
+    SystemEvent.DARK_MODE -> Icons.Rounded.DarkMode
+    SystemEvent.LIGHT_MODE -> Icons.Rounded.LightMode
+    SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_DISCONNECTED -> Icons.Rounded.Wifi
+    SystemEvent.CLIPBOARD -> Icons.Rounded.ContentPaste
+}
+
+internal fun systemColor(event: SystemEvent, accent: Color): Color = when (event) {
+    SystemEvent.CHARGING, SystemEvent.SAVER_OFF -> CallGreen
+    SystemEvent.BATTERY_LOW, SystemEvent.RINGER_SILENT -> DeclineRed
+    SystemEvent.AIRPLANE_ON -> AirplaneOrange
+    SystemEvent.FLASHLIGHT_ON -> TorchWarm
+    SystemEvent.SAVER_ON, SystemEvent.LIGHT_MODE -> SaverYellow
+    SystemEvent.MONSTER_ON -> MonsterRed
+    SystemEvent.DARK_MODE -> NightIndigo
+    SystemEvent.WIFI_CONNECTED -> WifiBlue
+    SystemEvent.CLIPBOARD -> ClipTeal
+    SystemEvent.UNPLUGGED, SystemEvent.HEADPHONES_DISCONNECTED, SystemEvent.AIRPLANE_OFF,
+    SystemEvent.FLASHLIGHT_OFF, SystemEvent.MONSTER_OFF, SystemEvent.WIFI_DISCONNECTED -> Secondary
+    else -> accent
+}
+
+internal fun systemTitle(event: SystemEvent): String = when (event) {
+    SystemEvent.CHARGING -> "Charging"
+    SystemEvent.UNPLUGGED -> "Unplugged"
+    SystemEvent.BATTERY_LOW -> "Battery low"
+    SystemEvent.RINGER_NORMAL -> "Ring"
+    SystemEvent.RINGER_VIBRATE -> "Vibrate"
+    SystemEvent.RINGER_SILENT -> "Silent mode"
+    SystemEvent.HEADPHONES_CONNECTED -> "Connected"
+    SystemEvent.HEADPHONES_DISCONNECTED -> "Disconnected"
+    SystemEvent.AIRPLANE_ON, SystemEvent.AIRPLANE_OFF -> "Airplane mode"
+    SystemEvent.FLASHLIGHT_ON, SystemEvent.FLASHLIGHT_OFF -> "Flashlight"
+    SystemEvent.SAVER_ON, SystemEvent.SAVER_OFF -> "Battery saver"
+    SystemEvent.MONSTER_ON, SystemEvent.MONSTER_OFF -> "Monster mode"
+    SystemEvent.DARK_MODE -> "Dark mode"
+    SystemEvent.LIGHT_MODE -> "Light mode"
+    SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_DISCONNECTED -> "Wi-Fi"
+    SystemEvent.CLIPBOARD -> "Copied"
+}

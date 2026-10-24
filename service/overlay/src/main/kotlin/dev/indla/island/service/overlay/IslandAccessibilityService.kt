@@ -10,6 +10,7 @@ import android.content.IntentFilter
 import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.os.Build
+import android.util.Log
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
@@ -18,7 +19,6 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.WindowManager.LayoutParams
-import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
@@ -41,8 +41,10 @@ import dev.indla.island.model.Environment
 import dev.indla.island.model.IslandAppearance
 import dev.indla.island.model.IslandMode
 import dev.indla.island.model.IslandUiState
+import dev.indla.island.model.ItemKind
 import dev.indla.island.model.LiveContent
 import dev.indla.island.model.MediaCommand
+import dev.indla.island.model.SystemEvent
 import dev.indla.island.ui.island.HitRegistry
 import dev.indla.island.ui.island.IslandHitCallbacks
 import dev.indla.island.ui.island.IslandHitLayer
@@ -51,15 +53,17 @@ import dev.indla.island.ui.island.IslandRect
 import dev.indla.island.ui.island.IslandSurface
 import dev.indla.island.ui.island.LocalIconStore
 import dev.indla.island.ui.island.Transparency
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 /**
  * Draws the island over the status bar. A normal TYPE_APPLICATION_OVERLAY renders below the
@@ -105,6 +109,8 @@ class IslandAccessibilityService : AccessibilityService() {
     private var boostJob: Job? = null
     private var blur: BlurWindow? = null
     private var systemEvents: SystemEventMonitor? = null
+    private var lastNight: Boolean? = null
+    private val copies = CopyWatcher { engine.onSystemEvent(it) }
     private val controls by lazy { ControlPress(this, scope) }
 
     override fun onServiceConnected() {
@@ -128,7 +134,13 @@ class IslandAccessibilityService : AccessibilityService() {
             return
         }
         OverlayKeeper.markRunning(this)
+        lastNight = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         registerScreenReceiver()
+        scope.launch {
+            // Text events only while the Clipboard glance is on: they're frequent, so they cost
+            // nothing when it's off.
+            settings.settings.map { it.live.clipboard && it.enabled }.distinctUntilChanged().collect(::listenForCopies)
+        }
         systemEvents = SystemEventMonitor(this) { engine.onSystemEvent(it) }.also { it.start() }
         updateEnvironment { it.copy(landscape = metrics.value?.landscape == true, locked = keyguard.isKeyguardLocked) }
 
@@ -141,6 +153,8 @@ class IslandAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         when (event.eventType) {
+            AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED -> copies.onSelection(event)
+            AccessibilityEvent.TYPE_VIEW_CLICKED, AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED -> copies.onAction(event)
             AccessibilityEvent.TYPE_WINDOWS_CHANGED -> scheduleReadWindows()
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 onWindowState(event)
@@ -219,6 +233,13 @@ class IslandAccessibilityService : AccessibilityService() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         if (renderView == null) return
+        val night = newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        if (lastNight != null && lastNight != night) {
+            engine.onSystemEvent(
+                LiveContent.System(if (night) SystemEvent.DARK_MODE else SystemEvent.LIGHT_MODE, null, "On"),
+            )
+        }
+        lastNight = night
         reduceTransparency.value = Transparency.reduced(this)
         val m = ScreenMetrics.read(this, windowManager)
         metrics.value = m
@@ -325,6 +346,8 @@ class IslandAccessibilityService : AccessibilityService() {
 
         val bounds: IslandRect? = when {
             !state.visible -> null
+            // A glance over the open shade never takes the quick settings' touches.
+            engine.environment.shadeOpen && state.current?.kind == ItemKind.SYSTEM -> null
             state.positionEditing && state.mode == IslandMode.REST -> layout.rest().grow(14f)
             state.mode == IslandMode.REST -> null
             state.mode == IslandMode.EXPANDED -> layout.expanded(layout.expandedHeight(state))
@@ -483,6 +506,14 @@ class IslandAccessibilityService : AccessibilityService() {
         val bar = registry[HitRegistry.MEDIA_SEEK] ?: return
         val fraction = ((point.x - bar.left) / bar.width).coerceIn(0f, 1f)
         engine.onMediaCommand(MediaCommand.SeekTo((media.durationMs * fraction).toLong()))
+    }
+
+    private fun listenForCopies(on: Boolean) {
+        val info = serviceInfo ?: return
+        val copyEvents = AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED or AccessibilityEvent.TYPE_VIEW_CLICKED or
+            AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED
+        info.eventTypes = if (on) info.eventTypes or copyEvents else info.eventTypes and copyEvents.inv()
+        serviceInfo = info
     }
 
     // ---- Environment ---------------------------------------------------------------------------

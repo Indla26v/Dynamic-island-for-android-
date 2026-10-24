@@ -38,12 +38,27 @@ data class LiveSettings(
     val batteryLow: Boolean = true,
     val ringer: Boolean = true,
     val headphones: Boolean = true,
+    val airplane: Boolean = true,
+    val flashlight: Boolean = true,
+    val batterySaver: Boolean = true,
+    val monster: Boolean = true,
+    val theme: Boolean = true,
+    val wifi: Boolean = true,
+    /** "Copied" with what was copied: reads the selected text when Copy is tapped. */
+    val clipboard: Boolean = true,
 ) {
     fun allows(event: SystemEvent): Boolean = when (event) {
         SystemEvent.CHARGING, SystemEvent.UNPLUGGED -> charging
         SystemEvent.BATTERY_LOW -> batteryLow
         SystemEvent.RINGER_NORMAL, SystemEvent.RINGER_VIBRATE, SystemEvent.RINGER_SILENT -> ringer
         SystemEvent.HEADPHONES_CONNECTED, SystemEvent.HEADPHONES_DISCONNECTED -> headphones
+        SystemEvent.AIRPLANE_ON, SystemEvent.AIRPLANE_OFF -> airplane
+        SystemEvent.FLASHLIGHT_ON, SystemEvent.FLASHLIGHT_OFF -> flashlight
+        SystemEvent.SAVER_ON, SystemEvent.SAVER_OFF -> batterySaver
+        SystemEvent.MONSTER_ON, SystemEvent.MONSTER_OFF -> monster
+        SystemEvent.DARK_MODE, SystemEvent.LIGHT_MODE -> theme
+        SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_DISCONNECTED -> wifi
+        SystemEvent.CLIPBOARD -> clipboard
     }
 }
 

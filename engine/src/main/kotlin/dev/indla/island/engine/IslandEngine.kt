@@ -295,7 +295,8 @@ class IslandEngine(
 
     /** Charging, battery low, ringer mode or headphones: a brief compact glance. */
     fun onSystemEvent(event: LiveContent.System) {
-        if (!settings.enabled || !settings.live.allows(event.event) || !isVisible()) return
+        // Mode switches mostly happen in quick settings, so these glances show over the shade.
+        if (!settings.enabled || !settings.live.allows(event.event) || !isVisible(overShade = true)) return
         val key = SYSTEM_KEY_PREFIX + systemGroup(event.event)
         val item = IslandItem(
             key = key,
@@ -322,7 +323,8 @@ class IslandEngine(
         }
         if (existing >= 0) removeAt(existing)
         // Headphones connecting open up briefly to show the pair and its battery, then leave.
-        val showcase = event.event == SystemEvent.HEADPHONES_CONNECTED
+        // Opened by default: the pair and its battery, the plane flying in, the moon swinging in.
+        val showcase = true
         insert(Active(item, clock() + if (showcase) SHOWCASE_MS else SYSTEM_EVENT_MS, selfTest = false), autoExpand = showcase && !busy())
         if (showcase && expanded) expandedDeadline = clock() + SHOWCASE_MS
         publish()
@@ -713,13 +715,14 @@ class IslandEngine(
         return !(inForeground && settings.whenToShow.hideInForegroundApp && priority != Priority.HIGH && !selfTest)
     }
 
-    private fun isVisible(): Boolean {
+    /** @param overShade ignore an open shade (system glances show over it). */
+    private fun isVisible(overShade: Boolean = false): Boolean {
         if (!settings.enabled) return false
         if (positionEditing) return true
         val w = settings.whenToShow
         return !(env.landscape && w.hideInLandscape) &&
             !(env.fullscreen && w.hideInFullscreen) &&
-            !(env.shadeOpen && w.hideWhenShadeOpen) &&
+            !(env.shadeOpen && w.hideWhenShadeOpen && !overShade) &&
             !(env.locked && !w.showOnLockscreen)
     }
 
@@ -836,7 +839,7 @@ class IslandEngine(
         }
         _state.value = IslandUiState(
             mode = mode,
-            visible = isVisible(),
+            visible = isVisible(overShade = current()?.kind == ItemKind.SYSTEM),
             items = active.map { lockRedacted(withStack(it)) },
             currentIndex = currentIndex,
             replyOpen = replyOpen,
@@ -909,6 +912,13 @@ class IslandEngine(
             SystemEvent.CHARGING, SystemEvent.UNPLUGGED, SystemEvent.BATTERY_LOW -> "battery"
             SystemEvent.RINGER_NORMAL, SystemEvent.RINGER_VIBRATE, SystemEvent.RINGER_SILENT -> "ringer"
             SystemEvent.HEADPHONES_CONNECTED, SystemEvent.HEADPHONES_DISCONNECTED -> "headphones"
+            SystemEvent.AIRPLANE_ON, SystemEvent.AIRPLANE_OFF -> "airplane"
+            SystemEvent.FLASHLIGHT_ON, SystemEvent.FLASHLIGHT_OFF -> "flashlight"
+            SystemEvent.SAVER_ON, SystemEvent.SAVER_OFF -> "saver"
+            SystemEvent.MONSTER_ON, SystemEvent.MONSTER_OFF -> "monster"
+            SystemEvent.DARK_MODE, SystemEvent.LIGHT_MODE -> "theme"
+            SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_DISCONNECTED -> "wifi"
+            SystemEvent.CLIPBOARD -> "clipboard"
         }
     }
 }

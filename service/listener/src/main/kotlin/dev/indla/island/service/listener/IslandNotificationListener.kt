@@ -34,7 +34,8 @@ class IslandNotificationListener : NotificationListenerService() {
     private val main = Handler(Looper.getMainLooper())
 
     override fun onListenerConnected() {
-        OverlayKeeper.restoreIfDropped(this)
+        // The listener comes back after a force-stop on its own; the overlay doesn't.
+        if (!OverlayKeeper.restoreIfDropped(this)) DroppedNotice.showIfDropped(this)
         performer.attach(this)
         engine.addRedactedMarkers(extractor.systemRedactedMarkers())
         val ranking = currentRanking

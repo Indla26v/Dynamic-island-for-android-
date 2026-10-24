@@ -111,6 +111,13 @@ class SettingsRepository @Inject constructor(
                 batteryLow = this[Keys.live("battery_low")] ?: d.live.batteryLow,
                 ringer = this[Keys.live("ringer")] ?: d.live.ringer,
                 headphones = this[Keys.live("headphones")] ?: d.live.headphones,
+                airplane = this[Keys.live("airplane")] ?: d.live.airplane,
+                flashlight = this[Keys.live("flashlight")] ?: d.live.flashlight,
+                batterySaver = this[Keys.live("battery_saver")] ?: d.live.batterySaver,
+                monster = this[Keys.live("monster")] ?: d.live.monster,
+                theme = this[Keys.live("theme")] ?: d.live.theme,
+                wifi = this[Keys.live("wifi")] ?: d.live.wifi,
+                clipboard = this[Keys.live("clipboard")] ?: d.live.clipboard,
             ),
             onboardingDone = this[Keys.onboardingDone] ?: d.onboardingDone,
             accessibilityDisclosureAccepted = this[Keys.disclosure] ?: d.accessibilityDisclosureAccepted,
@@ -136,6 +143,13 @@ class SettingsRepository @Inject constructor(
         this[Keys.live("battery_low")] = s.live.batteryLow
         this[Keys.live("ringer")] = s.live.ringer
         this[Keys.live("headphones")] = s.live.headphones
+        this[Keys.live("airplane")] = s.live.airplane
+        this[Keys.live("flashlight")] = s.live.flashlight
+        this[Keys.live("battery_saver")] = s.live.batterySaver
+        this[Keys.live("monster")] = s.live.monster
+        this[Keys.live("theme")] = s.live.theme
+        this[Keys.live("wifi")] = s.live.wifi
+        this[Keys.live("clipboard")] = s.live.clipboard
         this[Keys.hideForeground] = s.whenToShow.hideInForegroundApp
         this[Keys.hideFullscreen] = s.whenToShow.hideInFullscreen
         this[Keys.hideLandscape] = s.whenToShow.hideInLandscape

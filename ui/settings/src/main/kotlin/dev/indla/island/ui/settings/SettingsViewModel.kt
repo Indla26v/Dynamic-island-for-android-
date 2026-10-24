@@ -89,6 +89,27 @@ class SettingsViewModel @Inject constructor(
 
     fun tryMusic() = live.playMusic()
 
+    /** Every mode glance in turn, as the phone would raise them. */
+    fun tryModes() {
+        viewModelScope.launch {
+            listOf(
+                LiveContent.System(SystemEvent.RINGER_SILENT, null, "Sounds off"),
+                LiveContent.System(SystemEvent.RINGER_VIBRATE, null, "Vibrate only"),
+                LiveContent.System(SystemEvent.RINGER_NORMAL, null, "Sound on"),
+                LiveContent.System(SystemEvent.AIRPLANE_ON, null, "On"),
+                LiveContent.System(SystemEvent.FLASHLIGHT_ON, null, "On"),
+                LiveContent.System(SystemEvent.SAVER_ON, 62, "On · 62%"),
+                LiveContent.System(SystemEvent.MONSTER_ON, null, "On"),
+                LiveContent.System(SystemEvent.DARK_MODE, null, "On"),
+                LiveContent.System(SystemEvent.WIFI_CONNECTED, null, "Connected"),
+                LiveContent.System(SystemEvent.CLIPBOARD, null, "Meet at 7, Café Coffee Day, 100 Ft Rd"),
+            ).forEach {
+                engine.onSystemEvent(it)
+                delay(2_600)
+            }
+        }
+    }
+
     /** The headphones card as a pair would raise it: connected first, battery a moment later. */
     fun tryEarbuds() {
         val card = LiveContent.System(SystemEvent.HEADPHONES_CONNECTED, null, "Island Buds Pro", earbuds = true)

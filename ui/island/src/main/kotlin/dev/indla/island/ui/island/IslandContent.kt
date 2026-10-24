@@ -93,7 +93,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
-private val Secondary = Color(0xA6FFFFFF)
+internal val Secondary = Color(0xA6FFFFFF)
 private val ButtonFill = Color(0x2EFFFFFF)
 private val Tabular = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
 
@@ -154,7 +154,7 @@ private fun RowScope.CompactLeading(item: IslandItem, size: Dp, accent: Color) {
         is LiveContent.System -> if (live.event == SystemEvent.HEADPHONES_CONNECTED) {
             Icon(headphonesIcon(live), null, tint = Color.White, modifier = Modifier.size(size * 0.85f))
         } else {
-            SystemIcon(live.event, systemColor(live.event, accent), size * 0.85f)
+            SystemGlyph(live.event, systemColor(live.event, accent), size * 0.85f, live.level)
         }
         is LiveContent.Progress -> if (live.navigation) TurnArrow(item, size) else ItemIcon(item, size)
         is LiveContent.Timer -> if (live.recording) {
@@ -226,7 +226,13 @@ private fun RowScope.CompactTrailing(item: IslandItem, accent: Color, minimal: B
         }
         is LiveContent.System -> {
             val color = systemColor(live.event, accent)
-            if (live.event == SystemEvent.HEADPHONES_CONNECTED && live.level != null) {
+            if (live.event == SystemEvent.CLIPBOARD) {
+                GlanceText("Copied", color)
+            } else if (live.event == SystemEvent.RINGER_SILENT || live.event == SystemEvent.RINGER_VIBRATE || live.event == SystemEvent.RINGER_NORMAL) {
+                GlanceText(systemTitle(live.event).removeSuffix(" mode"), color)
+            } else if (live.event == SystemEvent.SAVER_ON || live.event == SystemEvent.SAVER_OFF) {
+                GlanceText(if (live.event == SystemEvent.SAVER_ON) "Saver on" else "Saver off", color)
+            } else if (live.event == SystemEvent.HEADPHONES_CONNECTED && live.level != null) {
                 BatteryRing(live.level!!, 22.dp)
             } else if (live.level != null) {
                 GlanceText(live.label, color)
@@ -756,13 +762,16 @@ private fun SystemBody(system: LiveContent.System, accent: Color) {
     val reveal = rememberReveal()
     Row(Modifier.fillMaxWidth().height(IslandLayout.SYSTEM_ROW.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-            system.level?.let { ProgressRing(it / 100f * reveal, color, Modifier.size(48.dp), stroke = 4.dp) }
-            SystemIcon(system.event, color, 24.dp)
+            // The saver draws its own battery; a ring around it would say the same twice.
+            if (system.event != SystemEvent.SAVER_ON && system.event != SystemEvent.SAVER_OFF) {
+                system.level?.let { ProgressRing(it / 100f * reveal, color, Modifier.size(48.dp), stroke = 4.dp) }
+            }
+            SystemGlyph(system.event, color, if (system.event == SystemEvent.SAVER_ON || system.event == SystemEvent.SAVER_OFF) 36.dp else 26.dp, system.level)
         }
         Spacer(Modifier.width(14.dp))
         Column {
             Text(systemTitle(system.event), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-            Text(system.label, color = Secondary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(system.label, color = Secondary, fontSize = 14.sp, maxLines = if (system.event == SystemEvent.CLIPBOARD) 2 else 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -796,37 +805,6 @@ private fun BatteryRing(level: Int, size: Dp) {
     }
 }
 
-/**
- * System glances with their own motion: the bolt flashes, the bell swings, the phone buzzes
- * side to side, silent mode settles, headphones nod.
- */
-@Composable
-private fun SystemIcon(event: SystemEvent, color: Color, size: Dp) {
-    val shake = rememberShake()
-    val flash = rememberReveal(700)
-    Icon(
-        systemIcon(event),
-        null,
-        tint = color,
-        modifier = Modifier.size(size).graphicsLayer {
-            when (event) {
-                SystemEvent.RINGER_NORMAL -> {
-                    rotationZ = 22f * shake
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.1f)
-                }
-                SystemEvent.RINGER_VIBRATE -> translationX = 3.dp.toPx() * kotlin.math.sin(flash * 18 * kotlin.math.PI).toFloat() * (1f - flash)
-                SystemEvent.RINGER_SILENT -> alpha = 0.4f + 0.6f * flash
-                SystemEvent.CHARGING -> {
-                    val pop = 1f + 0.35f * kotlin.math.sin(flash * kotlin.math.PI).toFloat()
-                    scaleX = pop
-                    scaleY = pop
-                }
-                SystemEvent.HEADPHONES_CONNECTED, SystemEvent.HEADPHONES_DISCONNECTED -> rotationZ = 10f * shake
-                else -> Unit
-            }
-        },
-    )
-}
 
 private fun batteryColor(level: Int) = when {
     level < 15 -> DeclineRed
@@ -1051,30 +1029,5 @@ private fun PillButton(label: String, icon: ImageVector?, registry: HitRegistry?
     }
 }
 
-private fun systemIcon(event: SystemEvent): ImageVector = when (event) {
-    SystemEvent.CHARGING -> Icons.Rounded.Bolt
-    SystemEvent.UNPLUGGED -> Icons.Rounded.BatteryStd
-    SystemEvent.BATTERY_LOW -> Icons.Rounded.BatteryAlert
-    SystemEvent.RINGER_NORMAL -> Icons.Rounded.NotificationsActive
-    SystemEvent.RINGER_VIBRATE -> Icons.Rounded.Vibration
-    SystemEvent.RINGER_SILENT -> Icons.Rounded.NotificationsOff
-    SystemEvent.HEADPHONES_CONNECTED, SystemEvent.HEADPHONES_DISCONNECTED -> Icons.Rounded.Headphones
-}
 
-private fun systemColor(event: SystemEvent, accent: Color): Color = when (event) {
-    SystemEvent.CHARGING -> CallGreen
-    SystemEvent.BATTERY_LOW, SystemEvent.RINGER_SILENT -> DeclineRed
-    SystemEvent.UNPLUGGED, SystemEvent.HEADPHONES_DISCONNECTED -> Secondary
-    else -> accent
-}
 
-private fun systemTitle(event: SystemEvent): String = when (event) {
-    SystemEvent.CHARGING -> "Charging"
-    SystemEvent.UNPLUGGED -> "Unplugged"
-    SystemEvent.BATTERY_LOW -> "Battery low"
-    SystemEvent.RINGER_NORMAL -> "Ring"
-    SystemEvent.RINGER_VIBRATE -> "Vibrate"
-    SystemEvent.RINGER_SILENT -> "Silent mode"
-    SystemEvent.HEADPHONES_CONNECTED -> "Connected"
-    SystemEvent.HEADPHONES_DISCONNECTED -> "Disconnected"
-}

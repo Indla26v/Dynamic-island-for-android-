@@ -488,6 +488,16 @@ class IslandEngineTest {
     }
 
     @Test
+    fun modeGlance_showsOverTheShade_notificationsDont() = test { h ->
+        h.engine.updateEnvironment(Environment(shadeOpen = true))
+        h.engine.onPosted(Fixtures.whatsAppDirect())
+        assertEquals("a notification waits while the shade is open", IslandMode.REST, h.state.mode)
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.AIRPLANE_ON, null, "On"))
+        assertTrue("toggled in quick settings: shown over the shade", h.state.visible)
+        assertEquals(IslandMode.EXPANDED, h.state.mode)
+    }
+
+    @Test
     fun timerPause_keepsTheCardOpen() = test { h ->
         h.engine.onPosted(Fixtures.clockTimer())
         h.engine.onGesture(IslandGesture.TAP)
@@ -500,7 +510,8 @@ class IslandEngineTest {
     fun systemEvent_isBrief_andRespectsSettings() = test { h ->
         h.engine.onSystemEvent(LiveContent.System(SystemEvent.CHARGING, 54, "54%"))
         assertEquals(ItemKind.SYSTEM, h.state.current?.kind)
-        advanceTimeBy(IslandEngine.SYSTEM_EVENT_MS + 100); runCurrent()
+        assertEquals("system glances open by default", IslandMode.EXPANDED, h.state.mode)
+        advanceTimeBy(IslandEngine.SHOWCASE_MS + 100); runCurrent()
         assertEquals(IslandMode.REST, h.state.mode)
         h.settings.value = h.settings.value.copy(live = h.settings.value.live.copy(charging = false))
         runCurrent()

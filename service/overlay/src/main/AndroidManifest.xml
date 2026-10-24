@@ -4,6 +4,9 @@
     <!-- Optional (Nearby devices): a Bluetooth pair's own name and battery on the connected card.
          Without it the card still shows, with the audio device's name. -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- "Wi-Fi connected" glances. Reads the connection state only; Island still has no
+         INTERNET permission and opens no connections. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission
         android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />

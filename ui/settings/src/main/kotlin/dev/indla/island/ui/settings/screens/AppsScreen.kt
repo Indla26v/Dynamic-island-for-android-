@@ -21,17 +21,24 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AirplanemodeActive
 import androidx.compose.material.icons.rounded.BatteryAlert
+import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ContentPaste
+import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.FlashlightOn
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -170,6 +177,13 @@ private fun LiveCard(live: LiveSettings, onLive: ((LiveSettings) -> LiveSettings
             GlassChip("Battery low", { onLive { it.copy(batteryLow = !it.batteryLow) } }, Icons.Rounded.BatteryAlert, live.batteryLow)
             GlassChip("Ringer", { onLive { it.copy(ringer = !it.ringer) } }, Icons.Rounded.NotificationsActive, live.ringer)
             GlassChip("Headphones", { onLive { it.copy(headphones = !it.headphones) } }, Icons.Rounded.Headphones, live.headphones)
+            GlassChip("Airplane", { onLive { it.copy(airplane = !it.airplane) } }, Icons.Rounded.AirplanemodeActive, live.airplane)
+            GlassChip("Flashlight", { onLive { it.copy(flashlight = !it.flashlight) } }, Icons.Rounded.FlashlightOn, live.flashlight)
+            GlassChip("Battery saver", { onLive { it.copy(batterySaver = !it.batterySaver) } }, Icons.Rounded.BatterySaver, live.batterySaver)
+            GlassChip("Monster mode", { onLive { it.copy(monster = !it.monster) } }, Icons.Rounded.LocalFireDepartment, live.monster)
+            GlassChip("Dark / light", { onLive { it.copy(theme = !it.theme) } }, Icons.Rounded.DarkMode, live.theme)
+            GlassChip("Wi-Fi", { onLive { it.copy(wifi = !it.wifi) } }, Icons.Rounded.Wifi, live.wifi)
+            GlassChip("Clipboard", { onLive { it.copy(clipboard = !it.clipboard) } }, Icons.Rounded.ContentPaste, live.clipboard)
         }
     }
 }

@@ -128,6 +128,7 @@ fun IslandApp(showDebug: Boolean) {
                                 onTryDownload = { if (!vm.tryDownload()) askNotifications() },
                                 onTryMusic = vm::tryMusic,
                                 onTryEarbuds = vm::tryEarbuds,
+                                onTryModes = vm::tryModes,
                                 onAllowContacts = { optionalPermission.launch(Manifest.permission.READ_CONTACTS) },
                                 onAllowBluetooth = {
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) optionalPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)

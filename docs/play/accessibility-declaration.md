@@ -6,7 +6,11 @@ Paste into **Play Console → App content → Accessibility API**. Island is **n
 
 > Island shows notifications and live activities (music, calls, downloads) as an "island" at the phone's camera cutout. Android only lets an app draw over the status bar, where the cutout is, with a `TYPE_ACCESSIBILITY_OVERLAY` window. Normal overlays (`TYPE_APPLICATION_OVERLAY`) render below the status bar and can't sit on the cutout. Island uses the AccessibilityService API for that overlay window.
 >
-> Island also reads the on-screen **window list**, meaning window types and bounds. It never reads window content. This tells it which app is in front, whether the status bar is hidden (full-screen video or games), and whether the notification shade is open, so the island can get out of the way. `canRetrieveWindowContent` is set only because Android requires it to list windows. Island never calls `getRootInActiveWindow()` and never reads node text or views.
+> Island also reads the on-screen **window list**, meaning window types and bounds. This tells it which app is in front, whether the status bar is hidden (full-screen video or games), and whether the notification shade is open, so the island can get out of the way.
+>
+> Island reads window content in two cases, both started by the user:
+> - **Controls for apps that offer none.** When the user taps the island's play/pause or stop for an app whose notification has no such actions, Island opens that app, finds its own button by label, presses it, and returns. Nothing is stored.
+> - **Clipboard glance (optional, on by default, a switch in Live activities).** When the user taps Copy, Island shows the text they had selected, as a 3-second glance. Only the last selection is kept in memory, never from password fields, and never written anywhere. Text events are subscribed to only while this switch is on.
 
 ## Does the app collect or share personal and sensitive data through this API?
 

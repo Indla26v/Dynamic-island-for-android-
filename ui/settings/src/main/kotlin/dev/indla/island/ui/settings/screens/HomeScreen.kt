@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -81,6 +82,7 @@ fun HomeScreen(
     onTryDownload: () -> Unit,
     onTryMusic: () -> Unit,
     onTryEarbuds: () -> Unit,
+    onTryModes: () -> Unit,
     onAllowContacts: () -> Unit,
     onAllowBluetooth: () -> Unit,
     onOpenFixtures: () -> Unit,
@@ -227,6 +229,7 @@ fun HomeScreen(
                     GlassChip("Download", onTryDownload, Icons.Rounded.Download)
                     GlassChip("Music", onTryMusic, Icons.Rounded.MusicNote)
                     GlassChip("Earbuds", onTryEarbuds, Icons.Rounded.Headphones)
+                    GlassChip("Modes", onTryModes, Icons.Rounded.Tune)
                 }
                 Text(
                     "Leave Island after starting music or a call to see it on the island.",
