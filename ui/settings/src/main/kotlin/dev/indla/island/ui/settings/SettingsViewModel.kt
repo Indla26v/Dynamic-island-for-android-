@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.indla.island.data.OverlayKeeper
 import dev.indla.island.data.SettingsRepository
 import dev.indla.island.data.rules.AppRuleRepository
 import dev.indla.island.engine.IslandEngine
@@ -22,13 +23,13 @@ import dev.indla.island.service.listener.selftest.TestLiveActivities
 import dev.indla.island.service.listener.selftest.TestNotificationPoster
 import dev.indla.island.service.overlay.FrameStats
 import dev.indla.island.service.overlay.OverlayFrameStats
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -61,6 +62,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun refreshPermissions() {
+        OverlayKeeper.restoreIfDropped(context)
         _permissions.value = Permissions.status(context)
     }
 
@@ -115,6 +117,9 @@ class SettingsViewModel @Inject constructor(
 
     fun setPositionEditing(editing: Boolean) = engine.setPositionEditing(editing)
 
+    /** Live size while the slider is dragged; null once it is released and saved. */
+    fun previewSize(scale: Float?) = engine.previewSize(scale)
+
     fun nudge(dxDp: Float, dyDp: Float) = updateAppearance {
         it.copy(offsetXDp = it.offsetXDp + dxDp, offsetYDp = (it.offsetYDp + dyDp).coerceIn(-40f, 160f))
     }
@@ -129,5 +134,6 @@ class SettingsViewModel @Inject constructor(
 
     override fun onCleared() {
         engine.setPositionEditing(false)
+        engine.previewSize(null)
     }
 }

@@ -82,6 +82,10 @@ class IslandEngine(
     private var quickActionsOpen = false
     private var positionEditing = false
     private var expandedDeadline = 0L
+    /** A finger is on an interactive part of the card (the music bar); don't collapse under it. */
+    private var holding = false
+    /** Size from the Look screen's slider while it is dragged, before it is saved. */
+    private var previewScale: Float? = null
     private var timer: Job? = null
 
     /** key -> content hash of everything posted and not yet removed; bounded. */
@@ -303,6 +307,13 @@ class IslandEngine(
         publish()
     }
 
+    fun onHold(down: Boolean) {
+        if (holding == down) return
+        holding = down
+        touch()
+        publish()
+    }
+
     fun onReplySent(text: String) {
         val item = current() ?: return
         val action = item.replyAction ?: return
@@ -356,6 +367,12 @@ class IslandEngine(
         quickActionsOpen = false
         expanded = true
         touch()
+        publish()
+    }
+
+    fun previewSize(scale: Float?) {
+        if (previewScale == scale) return
+        previewScale = scale
         publish()
     }
 
@@ -564,6 +581,7 @@ class IslandEngine(
 
     private fun collapse() {
         expanded = false
+        holding = false
         replyOpen = false
         quickActionsOpen = false
         val now = clock()
@@ -658,7 +676,7 @@ class IslandEngine(
             replyOpen = replyOpen,
             quickActionsOpen = quickActionsOpen,
             positionEditing = positionEditing,
-            appearance = settings.appearance,
+            appearance = previewScale?.let { settings.appearance.copy(sizeScale = it) } ?: settings.appearance,
         )
         reschedule()
     }
@@ -668,7 +686,7 @@ class IslandEngine(
         timer = null
         if (active.isEmpty()) return
         val deadline = when {
-            expanded && replyOpen -> return
+            expanded && (replyOpen || holding) -> return
             expanded -> expandedDeadline
             else -> active.minOf { it.expiresAt }
         }
@@ -683,7 +701,7 @@ class IslandEngine(
     private fun onTimer() {
         val now = clock()
         if (expanded) {
-            if (!replyOpen && now >= expandedDeadline) collapse()
+            if (!replyOpen && !holding && now >= expandedDeadline) collapse()
         } else {
             removeWhere { it.expiresAt <= now }
         }

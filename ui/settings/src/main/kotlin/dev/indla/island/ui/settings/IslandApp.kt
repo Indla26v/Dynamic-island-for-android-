@@ -148,6 +148,7 @@ fun IslandApp(showDebug: Boolean) {
                                 onGestures = { vm.updateGestures(it) },
                                 onAutoHide = vm::setAutoHide,
                                 onPositionEditing = vm::setPositionEditing,
+                                onPreviewSize = vm::previewSize,
                                 onNudge = { dx, dy -> vm.nudge(dx, dy) },
                                 onResetPosition = { vm.resetPosition() },
                             )

@@ -6,6 +6,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import dagger.hilt.android.AndroidEntryPoint
+import dev.indla.island.data.OverlayKeeper
 import dev.indla.island.engine.IslandEngine
 import javax.inject.Inject
 
@@ -22,6 +23,7 @@ class IslandNotificationListener : NotificationListenerService() {
     @Inject lateinit var media: MediaWatcher
 
     override fun onListenerConnected() {
+        OverlayKeeper.restoreIfDropped(this)
         performer.attach(this)
         engine.addRedactedMarkers(extractor.systemRedactedMarkers())
         val ranking = currentRanking

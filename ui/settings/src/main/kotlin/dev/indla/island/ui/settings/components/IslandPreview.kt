@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -58,10 +59,19 @@ private const val MockScale = 0.72f
  * phone's top edge, laid out against this device's actual cutout. Tap to cycle states.
  */
 @Composable
-fun IslandPreview(appearance: IslandAppearance, reduceTransparency: Boolean, modifier: Modifier = Modifier) {
+fun IslandPreview(
+    appearance: IslandAppearance,
+    reduceTransparency: Boolean,
+    modifier: Modifier = Modifier,
+    /** Bumped when a size change starts: jump to Compact, where size shows best. */
+    focusCompact: Int = 0,
+) {
     val context = LocalContext.current
     val metrics = remember { ScreenMetrics.read(context, context.getSystemService(WindowManager::class.java)) }
     var step by rememberSaveable { mutableIntStateOf(2) }
+    LaunchedEffect(focusCompact) {
+        if (focusCompact > 0 && step.mod(4) != 1) step = step - step.mod(4) + 1
+    }
     val state = PreviewSamples.state(step, context.packageName, appearance)
     val layout = remember(metrics, appearance) {
         IslandLayout.compute(metrics.cutout, metrics.widthDp, metrics.statusBarDp, appearance, metrics.heightDp)

@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.IntOffset
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
+import dev.indla.island.data.OverlayKeeper
 import dev.indla.island.data.SettingsRepository
 import dev.indla.island.data.icons.IconStore
 import dev.indla.island.engine.IslandEngine
@@ -100,6 +101,7 @@ class IslandAccessibilityService : AccessibilityService() {
     private var lastContent: Any? = null
     private var shadeFromEvents = false
     private var blurJob: Job? = null
+    private var windowsJob: Job? = null
     private var blur: BlurWindow? = null
     private var systemEvents: SystemEventMonitor? = null
 
@@ -111,10 +113,19 @@ class IslandAccessibilityService : AccessibilityService() {
         reduceTransparency.value = Transparency.reduced(this)
         metrics.value = ScreenMetrics.read(this, windowManager)
         owner.start()
-        // Added first so it stays under the island's own windows.
-        blur = BlurWindow(this) { supported -> if (!supported) blurShown.value = false }.also { it.create() }
-        addRenderWindow()
-        addHitWindow()
+        // A crash here makes Android mark the service as broken ("Not working") and stop binding
+        // it until the app is reinstalled, so nothing at startup may throw.
+        try {
+            // Added first so it stays under the island's own windows.
+            blur = runCatching { BlurWindow(this) { supported -> if (!supported) blurShown.value = false }.also { it.create() } }.getOrNull()
+            addRenderWindow()
+            addHitWindow()
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "couldn't add the island windows", e)
+            tearDown()
+            return
+        }
+        OverlayKeeper.markRunning(this)
         registerScreenReceiver()
         systemEvents = SystemEventMonitor(this) { engine.onSystemEvent(it) }.also { it.start() }
         updateEnvironment { it.copy(landscape = metrics.value?.landscape == true, locked = keyguard.isKeyguardLocked) }
@@ -128,10 +139,10 @@ class IslandAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         when (event.eventType) {
-            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> readWindows()
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> scheduleReadWindows()
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 onWindowState(event)
-                readWindows()
+                scheduleReadWindows()
             }
         }
     }
@@ -153,6 +164,18 @@ class IslandAccessibilityService : AccessibilityService() {
                 shadeFromEvents = false
                 updateEnvironment { it.copy(foregroundPackage = pkg, shadeOpen = false) }
             }
+        }
+    }
+
+    /**
+     * Window changes arrive in bursts (an app launch fires a dozen); read the list once per burst
+     * instead of once per event, since each read is a round trip to the system.
+     */
+    private fun scheduleReadWindows() {
+        if (windowsJob?.isActive == true) return
+        windowsJob = scope.launch {
+            delay(WINDOWS_COALESCE_MS)
+            readWindows()
         }
     }
 
@@ -405,6 +428,10 @@ class IslandAccessibilityService : AccessibilityService() {
         },
         onReplySend = { engine.onReplySent(it) },
         onReplyCancel = { engine.onReplyCancelled() },
+        onScrub = { down ->
+            if (down) hitHost?.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            engine.onHold(down)
+        },
     )
 
     /** A service has no display of its own; ask DisplayManager for the default one. */
@@ -516,6 +543,7 @@ class IslandAccessibilityService : AccessibilityService() {
         private const val SYSTEM_UI = "com.android.systemui"
         private const val TAG = "IslandOverlay"
         private const val BLUR_SETTLE_MS = 320L
+        private const val WINDOWS_COALESCE_MS = 48L
         private const val BLUR_RADIUS_DP = 28f
 
         /** `adb shell setprop log.tag.IslandOverlay DEBUG` turns on detection logging. */

@@ -14,6 +14,7 @@ import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import dev.indla.island.data.OverlayKeeper
 import dev.indla.island.service.listener.IslandNotificationListener
 import dev.indla.island.service.overlay.IslandAccessibilityService
 
@@ -26,12 +27,24 @@ data class PermissionStatus(
     val restricted: Boolean = false,
     /** Optional: caller and sender photos from the phone's contacts. */
     val contacts: Boolean = false,
+    /** The overlay ran before and is off now: the phone force-stopped Island. */
+    val overlayDropped: Boolean = false,
+    /** WRITE_SECURE_SETTINGS was granted over adb, so Island switches itself back on. */
+    val autoRestore: Boolean = false,
+    /** It was dropped before; keep the how-to-keep-it-on card until it's handled or hidden. */
+    val keepOnTips: Boolean = false,
 ) {
     val essentials get() = notificationAccess && accessibility
 }
 
 object Permissions {
-    fun status(context: Context) = PermissionStatus(
+    fun status(context: Context): PermissionStatus {
+        val dropped = OverlayKeeper.wasOn(context) && !accessibilityEnabled(context)
+        if (dropped) OverlayKeeper.noteDropped(context)
+        return snapshot(context, dropped)
+    }
+
+    private fun snapshot(context: Context, dropped: Boolean) = PermissionStatus(
         notificationAccess = context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context),
         accessibility = accessibilityEnabled(context),
         batteryUnrestricted = context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName),
@@ -39,7 +52,13 @@ object Permissions {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
         restricted = restrictedSettings(context),
         contacts = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED,
+        overlayDropped = dropped,
+        autoRestore = OverlayKeeper.canRestore(context),
+        keepOnTips = OverlayKeeper.showTips(context),
     )
+
+    /** The one-time command that lets Island switch its accessibility service back on. */
+    fun restoreCommand(context: Context) = "adb shell pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS"
 
     /**
      * Whether "restricted settings" is (likely) blocking the accessibility switch. Apps can't read
@@ -154,6 +173,7 @@ object OemBatterySteps {
             "vivo", "iqoo" -> "vivo / iQOO" to listOf(
                 "Settings → Battery → Background power consumption management → Island → Allow",
                 "i Manager → App manager → Autostart → turn on Island",
+                "Recent apps → pull down on Island's card → Lock",
             )
             "huawei", "honor" -> "Huawei / Honor" to listOf(
                 "Settings → Battery → App launch → Island → Manage manually, all three on",

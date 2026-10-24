@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
@@ -56,6 +57,8 @@ class IslandHitCallbacks(
     val onDragEnd: () -> Unit,
     val onReplySend: (String) -> Unit,
     val onReplyCancel: () -> Unit,
+    /** The finger went down on (true) or left (false) the music bar; keeps the card open meanwhile. */
+    val onScrub: (Boolean) -> Unit = {},
 )
 
 /**
@@ -77,6 +80,8 @@ fun IslandHitLayer(
     val latestOrigin by rememberUpdatedState(origin)
     val swipeX = with(density) { 36.dp.toPx() }
     val swipeY = with(density) { 22.dp.toPx() }
+    val seekSlopX = with(density) { 10.dp.toPx() }
+    val seekSlopY = with(density) { 14.dp.toPx() }
 
     Box(
         Modifier
@@ -86,6 +91,32 @@ fun IslandHitLayer(
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val start = down.position
+                    val originPx = Offset(latestOrigin.x.toFloat(), latestOrigin.y.toFloat())
+                    val bar = registry[HitRegistry.MEDIA_SEEK]
+                    // The music bar takes the touch at once: no long-press wait, no slop, and a
+                    // target taller than the thin track so a thumb lands on it.
+                    if (bar != null && !latestState.positionEditing &&
+                        Rect(bar.left - seekSlopX, bar.top - seekSlopY, bar.right + seekSlopX, bar.bottom + seekSlopY)
+                            .contains(start + originPx)
+                    ) {
+                        fun fractionAt(p: Offset) = ((p.x + originPx.x - bar.left) / bar.width).coerceIn(0f, 1f)
+                        registry.scrubbing = true
+                        registry.scrub = fractionAt(start)
+                        callbacks.onScrub(true)
+                        var last = start
+                        while (true) {
+                            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            last = change.position
+                            registry.scrub = fractionAt(last)
+                            change.consume()
+                        }
+                        registry.scrubReleasedAt = android.os.SystemClock.elapsedRealtime()
+                        registry.scrubbing = false
+                        callbacks.onRegionTap(HitRegistry.MEDIA_SEEK, last + originPx)
+                        callbacks.onScrub(false)
+                        return@awaitEachGesture
+                    }
                     var outcome = Outcome.LONG_PRESS
                     withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                         while (true) {
@@ -124,12 +155,8 @@ fun IslandHitLayer(
                                 end = change.position
                                 if (!change.pressed) break
                             }
-                            val origin = Offset(latestOrigin.x.toFloat(), latestOrigin.y.toFloat())
                             if (latestState.positionEditing) {
                                 callbacks.onDragEnd()
-                            } else if (registry.find(start + origin) == HitRegistry.MEDIA_SEEK) {
-                                // Dragging along the music bar seeks to where the finger lifts.
-                                callbacks.onRegionTap(HitRegistry.MEDIA_SEEK, end + origin)
                             } else {
                                 val d = end - start
                                 val gesture = when {

@@ -314,6 +314,8 @@ fun GlassSliderRow(
     label: (Float) -> String,
     onChange: (Float) -> Unit,
     steps: Int = 0,
+    /** Every value while dragging (null on release), for live previews. */
+    onLive: ((Float?) -> Unit)? = null,
 ) {
     val glass = LocalGlass.current
     var dragging by remember { mutableStateOf(false) }
@@ -329,10 +331,12 @@ fun GlassSliderRow(
             onValueChange = {
                 dragging = true
                 local = it
+                onLive?.invoke(it)
             },
             onValueChangeFinished = {
                 dragging = false
                 onChange(local)
+                onLive?.invoke(null)
             },
             valueRange = range,
             steps = steps,

@@ -30,7 +30,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -64,6 +66,7 @@ import dev.indla.island.ui.settings.components.TabScaffold
 import dev.indla.island.ui.settings.components.glassSurface
 import dev.indla.island.ui.settings.theme.LocalGlass
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 @Composable
 fun LookScreen(
@@ -74,18 +77,35 @@ fun LookScreen(
     onGestures: ((GestureMap) -> GestureMap) -> Unit,
     onAutoHide: (Int) -> Unit,
     onPositionEditing: (Boolean) -> Unit,
+    onPreviewSize: (Float?) -> Unit,
     onNudge: (Float, Float) -> Unit,
     onResetPosition: () -> Unit,
 ) {
     val a = settings.appearance
     val glass = LocalGlass.current
     var editing by rememberSaveable { mutableStateOf(false) }
-    DisposableEffect(editing) {
-        onPositionEditing(editing)
+    // Size slider: the preview and the real island follow the finger, then the island stays
+    // visible a moment after release so the new size can be seen on the camera.
+    var liveSize by remember { mutableStateOf<Float?>(null) }
+    var sizeTouches by remember { mutableIntStateOf(0) }
+    var showingSize by remember { mutableStateOf(false) }
+    LaunchedEffect(a.sizeScale) {
+        liveSize = null
+        onPreviewSize(null)
+    }
+    LaunchedEffect(sizeTouches) {
+        if (sizeTouches == 0) return@LaunchedEffect
+        showingSize = true
+        delay(SIZE_SHOW_MS)
+        showingSize = false
+    }
+    DisposableEffect(editing || showingSize) {
+        onPositionEditing(editing || showingSize)
         onDispose { onPositionEditing(false) }
     }
+    val previewAppearance = liveSize?.let { a.copy(sizeScale = it) } ?: a
 
-    TabScaffold(title = "Look & feel", pinned = { IslandPreview(a, reduceTransparency) }) {
+    TabScaffold(title = "Look & feel", pinned = { IslandPreview(previewAppearance, reduceTransparency, focusCompact = sizeTouches) }) {
         item {
             GlassCard(title = "Appearance") {
                 Row(
@@ -105,9 +125,22 @@ fun LookScreen(
                     modifier = Modifier.padding(horizontal = Space.rowPadding, vertical = Space.m),
                 )
                 RowDivider(start = Space.rowPadding)
-                GlassSliderRow("Size", a.sizeScale, 0.8f..1.3f, { "${(it * 100).roundToInt()}%" }, { v ->
-                    onAppearance { it.copy(sizeScale = v) }
-                })
+                GlassSliderRow(
+                    "Size",
+                    a.sizeScale,
+                    0.8f..1.3f,
+                    { "${(it * 100).roundToInt()}%" },
+                    { v -> onAppearance { it.copy(sizeScale = v) } },
+                    onLive = { v ->
+                        if (v != null) {
+                            if (liveSize == null) sizeTouches++
+                            liveSize = v
+                            onPreviewSize(v)
+                        } else {
+                            sizeTouches++
+                        }
+                    },
+                )
                 GlassToggleRow(
                     "Glass card",
                     a.glassCard,
@@ -358,3 +391,5 @@ private fun actionLabel(a: GestureAction) = when (a) {
     GestureAction.QUICK_ACTIONS -> "Quick menu"
     GestureAction.NONE -> "Nothing"
 }
+
+private const val SIZE_SHOW_MS = 2500L

@@ -210,7 +210,8 @@ data class IslandLayout(
                 restHeight = restHeight,
                 hole = hole,
                 compactSide = side,
-                expandedWidth = min(screenWidth - 2 * EDGE - 4f, 420f),
+                // Already near full width at 100%, so only smaller sizes narrow the card.
+                expandedWidth = min(screenWidth - 2 * EDGE - 4f, 420f) * appearance.sizeScale.coerceIn(0.8f, 1f).let { 0.2f + 0.8f * it },
                 attachedToTop = attached,
                 minimal = appearance.preset == StylePreset.MINIMAL,
             )

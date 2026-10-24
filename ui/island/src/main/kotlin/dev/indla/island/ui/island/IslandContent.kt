@@ -1,7 +1,15 @@
 package dev.indla.island.ui.island
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -28,11 +36,10 @@ import androidx.compose.material.icons.rounded.BatteryAlert
 import androidx.compose.material.icons.rounded.BatteryStd
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Call
-import androidx.compose.material.icons.rounded.ChatBubble
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.CallEnd
+import androidx.compose.material.icons.rounded.ChatBubble
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Headphones
@@ -42,16 +49,19 @@ import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -71,6 +81,8 @@ import dev.indla.island.model.IslandUiState
 import dev.indla.island.model.ItemKind
 import dev.indla.island.model.LiveContent
 import dev.indla.island.model.SystemEvent
+import kotlin.math.abs
+import kotlinx.coroutines.delay
 
 private val Secondary = Color(0xA6FFFFFF)
 private val ButtonFill = Color(0x2EFFFFFF)
@@ -395,20 +407,31 @@ private fun MediaBody(item: IslandItem, media: LiveContent.Media, accent: Color,
     }
     Spacer(Modifier.height(IslandLayout.GAP.dp))
     val now by rememberNow(500)
-    val position = remember(now, media) { media.positionNow() }
-    val fraction = if (media.durationMs > 0) position.toFloat() / media.durationMs else 0f
+    val live = remember(now, media) { media.positionNow() }
+    // While dragged, and briefly after, the bar follows the finger instead of the player.
+    val scrub = registry?.scrub
+    val scrubbing = registry?.scrubbing == true
+    if (registry != null && scrub != null && !scrubbing) {
+        LaunchedEffect(media.positionAtElapsedMs, registry.scrubReleasedAt) {
+            if (media.positionAtElapsedMs < registry.scrubReleasedAt) delay(SCRUB_HOLD_MS)
+            registry.clearScrub()
+        }
+    }
+    val duration = media.durationMs
+    val position = if (scrub != null && duration > 0) (duration * scrub).toLong() else live
+    val fraction = scrub ?: if (duration > 0) live.toFloat() / duration else 0f
     Row(Modifier.fillMaxWidth().height(IslandLayout.SCRUBBER.dp), verticalAlignment = Alignment.CenterVertically) {
-        TimeLabel(formatDuration(position), Modifier.width(40.dp))
+        TimeLabel(formatDuration(position), Modifier.width(40.dp), active = scrubbing)
         Box(
             Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                .then(if (media.canSeek && media.durationMs > 0) Modifier.hitRegion(registry, HitRegistry.MEDIA_SEEK) else Modifier),
+                .then(if (media.canSeek && duration > 0) Modifier.hitRegion(registry, HitRegistry.MEDIA_SEEK) else Modifier),
             contentAlignment = Alignment.CenterStart,
         ) {
-            Scrubber(fraction.coerceIn(0f, 1f), accent, media.playing)
+            Scrubber(fraction.coerceIn(0f, 1f), accent, media.playing, scrubbing, follow = scrub != null)
         }
-        TimeLabel(if (media.durationMs > 0) "-" + formatDuration(media.durationMs - position) else "", Modifier.width(44.dp), end = true)
+        TimeLabel(if (duration > 0) "-" + formatDuration(duration - position) else "", Modifier.width(44.dp), end = true, active = scrubbing)
     }
     Row(
         Modifier.fillMaxWidth().height(IslandLayout.MEDIA_CONTROLS.dp),
@@ -421,40 +444,79 @@ private fun MediaBody(item: IslandItem, media: LiveContent.Media, accent: Color,
     }
 }
 
+private const val SCRUB_HOLD_MS = 1500L
+
 /**
- * Island's own music bar: a soft track in the app's colour, a gradient fill that glides between
- * position ticks, and a glowing thumb that breathes while playing. Tap or drag it to seek.
+ * Island's own music bar. Playing, the fill glides between position ticks with a soft sheen
+ * travelling along it; jumps (a seek, a new track) spring instead of crawling. Under the finger
+ * the track swells, the thumb grows a halo and the fill tracks the finger 1:1.
  */
 @Composable
-private fun Scrubber(fraction: Float, accent: Color, playing: Boolean) {
-    val smooth by animateFloatAsState(fraction, tween(520, easing = androidx.compose.animation.core.LinearEasing), label = "scrub")
-    val glow by androidx.compose.animation.core.rememberInfiniteTransition(label = "glow").animateFloat(
-        initialValue = 0.25f,
-        targetValue = if (playing) 0.55f else 0.25f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(tween(900), androidx.compose.animation.core.RepeatMode.Reverse),
-        label = "glowAlpha",
-    )
+private fun Scrubber(fraction: Float, accent: Color, playing: Boolean, scrubbing: Boolean, follow: Boolean) {
+    val progress = remember { Animatable(fraction) }
+    LaunchedEffect(fraction, follow) {
+        when {
+            follow -> progress.snapTo(fraction)
+            abs(fraction - progress.value) > 0.03f ->
+                progress.animateTo(fraction, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow))
+            else -> progress.animateTo(fraction, tween(520, easing = LinearEasing))
+        }
+    }
+    val swell by animateFloatAsState(if (scrubbing) 1f else 0f, spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium), label = "swell")
     val frozen = LocalFrozenTime.current != null
-    androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(18.dp)) {
-        val track = 6.dp.toPx()
+    val loop = rememberInfiniteTransition(label = "scrubber")
+    val sheen by loop.animateFloat(
+        initialValue = -0.3f,
+        targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(tween(2400, easing = LinearEasing)),
+        label = "sheen",
+    )
+    val glow by loop.animateFloat(
+        initialValue = 0.22f,
+        targetValue = if (playing) 0.5f else 0.22f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "glow",
+    )
+    val dim by animateFloatAsState(if (playing || scrubbing) 1f else 0.6f, tween(300), label = "dim")
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        val track = (6f + 6f * swell).dp.toPx()
         val y = size.height / 2
-        val x = size.width * smooth
+        val x = size.width * progress.value
+        val corner = androidx.compose.ui.geometry.CornerRadius(track / 2)
+        val top = androidx.compose.ui.geometry.Offset(0f, y - track / 2)
         drawRoundRect(
-            accent.copy(alpha = 0.22f),
-            topLeft = androidx.compose.ui.geometry.Offset(0f, y - track / 2),
+            Color.White.copy(alpha = 0.10f + 0.06f * swell),
+            topLeft = top,
             size = androidx.compose.ui.geometry.Size(size.width, track),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(track / 2),
+            cornerRadius = corner,
         )
         if (x > 0f) {
+            val fill = androidx.compose.ui.geometry.Size(x.coerceAtLeast(track), track)
             drawRoundRect(
-                androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(accent.copy(alpha = 0.75f), lighten(accent)), endX = x.coerceAtLeast(1f)),
-                topLeft = androidx.compose.ui.geometry.Offset(0f, y - track / 2),
-                size = androidx.compose.ui.geometry.Size(x, track),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(track / 2),
+                Brush.horizontalGradient(listOf(accent.copy(alpha = 0.7f * dim), lighten(accent).copy(alpha = dim)), endX = fill.width),
+                topLeft = top,
+                size = fill,
+                cornerRadius = corner,
             )
+            if (playing && !scrubbing && !frozen) {
+                // A highlight sweeping left to right inside the fill.
+                val c = size.width * sheen
+                val w = 36.dp.toPx()
+                drawRoundRect(
+                    Brush.horizontalGradient(
+                        listOf(Color.Transparent, Color.White.copy(alpha = 0.35f), Color.Transparent),
+                        startX = c - w,
+                        endX = c + w,
+                    ),
+                    topLeft = top,
+                    size = fill,
+                    cornerRadius = corner,
+                )
+            }
         }
-        drawCircle(accent.copy(alpha = if (frozen) 0.35f else glow), radius = 10.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, y))
-        drawCircle(Color.White, radius = 6.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, y))
+        val center = androidx.compose.ui.geometry.Offset(x, y)
+        drawCircle(accent.copy(alpha = if (frozen) 0.3f else glow * (1f - swell) + 0.3f * swell), radius = (9f + 7f * swell).dp.toPx(), center = center)
+        drawCircle(Color.White, radius = (5.5f + 2.5f * swell).dp.toPx(), center = center)
     }
 }
 
@@ -465,10 +527,11 @@ private fun lighten(color: Color) = Color(
 )
 
 @Composable
-private fun TimeLabel(text: String, modifier: Modifier, end: Boolean = false) {
+private fun TimeLabel(text: String, modifier: Modifier, end: Boolean = false, active: Boolean = false) {
+    val colour by animateColorAsState(if (active) Color.White else Secondary, tween(180), label = "timeLabel")
     Text(
         text,
-        color = Secondary,
+        color = colour,
         fontSize = 11.sp,
         style = Tabular,
         textAlign = if (end) androidx.compose.ui.text.style.TextAlign.End else androidx.compose.ui.text.style.TextAlign.Start,

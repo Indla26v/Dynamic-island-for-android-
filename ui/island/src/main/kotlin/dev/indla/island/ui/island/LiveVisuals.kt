@@ -2,7 +2,6 @@ package dev.indla.island.ui.island
 
 import android.os.SystemClock
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -14,6 +13,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -56,13 +56,16 @@ val LocalFrozenTime = staticCompositionLocalOf<Long?> { null }
 @Composable
 fun WaveBars(color: Color, playing: Boolean, modifier: Modifier = Modifier, bars: Int = 5) {
     val frozen = LocalFrozenTime.current != null
-    val transition = rememberInfiniteTransition(label = "bars")
-    val animated by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(durationMillis = 900, easing = LinearEasing), RepeatMode.Restart),
-        label = "phase",
-    )
+    // Bars this small read as smooth at 30 fps; ticking at the display's 90-120 Hz all the time
+    // music plays is the island's biggest battery cost. Paused bars don't tick at all.
+    val animated by produceState(0f, playing, frozen) {
+        if (!playing || frozen) return@produceState
+        val start = withFrameMillis { it }
+        while (true) {
+            value = ((withFrameMillis { it } - start) % WAVE_PERIOD_MS) / WAVE_PERIOD_MS.toFloat()
+            delay(WAVE_FRAME_MS)
+        }
+    }
     Canvas(modifier) {
         val phase = if (frozen) 0.3f else animated
         val gap = size.width / (bars * 2f - 1f)
@@ -83,6 +86,9 @@ fun WaveBars(color: Color, playing: Boolean, modifier: Modifier = Modifier, bars
         }
     }
 }
+
+private const val WAVE_PERIOD_MS = 900L
+private const val WAVE_FRAME_MS = 33L
 
 /** A thin ring; null fraction spins as indeterminate. */
 @Composable

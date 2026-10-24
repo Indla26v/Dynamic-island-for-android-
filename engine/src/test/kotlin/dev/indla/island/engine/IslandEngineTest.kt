@@ -339,6 +339,19 @@ class IslandEngineTest {
     }
 
     @Test
+    fun media_cardStaysOpenWhileScrubbing() = test { h ->
+        h.engine.onMedia(Fixtures.music(playing = true))
+        h.engine.onGesture(IslandGesture.TAP)
+        assertEquals(IslandMode.EXPANDED, h.state.mode)
+        h.engine.onHold(true)
+        advanceTimeBy(IslandEngine.EXPANDED_IDLE_MS * 2); runCurrent()
+        assertEquals("a finger on the bar keeps the card", IslandMode.EXPANDED, h.state.mode)
+        h.engine.onHold(false)
+        advanceTimeBy(IslandEngine.EXPANDED_IDLE_MS + 10); runCurrent()
+        assertEquals(IslandMode.COMPACT, h.state.mode)
+    }
+
+    @Test
     fun media_pausedSessionNobodySawStart_isNotNews() = test { h ->
         h.engine.onMedia(Fixtures.music(playing = false))
         assertEquals(IslandMode.REST, h.state.mode)

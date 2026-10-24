@@ -1,7 +1,10 @@
 package dev.indla.island.ui.island
 
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
@@ -15,6 +18,23 @@ import androidx.compose.ui.layout.onGloballyPositioned
  */
 class HitRegistry {
     private val regions = mutableStateMapOf<String, Rect>()
+
+    /**
+     * The music bar position under the finger (0..1) while it is dragged, then held after release
+     * until the player reports the new position, so the thumb never snaps back. The hit window
+     * writes it; the render window draws it.
+     */
+    var scrub by mutableStateOf<Float?>(null)
+        internal set
+    var scrubbing by mutableStateOf(false)
+        internal set
+    /** elapsedRealtime of the last release; positions reported before it are stale. */
+    var scrubReleasedAt = 0L
+        internal set
+
+    internal fun clearScrub() {
+        if (!scrubbing) scrub = null
+    }
 
     operator fun get(id: String): Rect? = regions[id]
 

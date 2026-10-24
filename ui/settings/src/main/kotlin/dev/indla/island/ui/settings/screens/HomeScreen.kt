@@ -3,6 +3,7 @@ package dev.indla.island.ui.settings.screens
 import android.service.notification.NotificationListenerService
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,17 +14,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
-import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Call
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.Icon
@@ -33,17 +35,24 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.indla.island.data.OverlayKeeper
 import dev.indla.island.model.IslandSettings
 import dev.indla.island.model.ServiceHealth
 import dev.indla.island.service.listener.IslandNotificationListener
+import dev.indla.island.ui.settings.OemBatterySteps
 import dev.indla.island.ui.settings.PermissionStatus
 import dev.indla.island.ui.settings.Permissions
 import dev.indla.island.ui.settings.components.AccessibilityHelp
@@ -109,6 +118,7 @@ fun HomeScreen(
     )
     val problems = checks.count { !it.ok }
     var showDetails by rememberSaveable { mutableStateOf(false) }
+    var keepOnHidden by rememberSaveable { mutableStateOf(false) }
 
     TabScaffold(
         title = "Island",
@@ -146,6 +156,18 @@ fun HomeScreen(
                         }
                     }
                 }
+            }
+        }
+
+        if (permissions.overlayDropped || (permissions.keepOnTips && !permissions.autoRestore && !keepOnHidden)) {
+            item {
+                KeepOnCard(
+                    permissions = permissions,
+                    onHide = {
+                        OverlayKeeper.hideTips(context)
+                        keepOnHidden = true
+                    },
+                )
             }
         }
 
@@ -245,6 +267,66 @@ private fun CheckRow(check: Check) {
             Text("On", color = glass.contentSecondary, fontSize = 14.sp, modifier = Modifier.padding(start = Space.s))
         } else {
             GlassPill(check.fixLabel, check.fix, primary = true, compact = true, modifier = Modifier.padding(start = Space.s))
+        }
+    }
+}
+
+/**
+ * Shown when the phone switched the accessibility service off (vivo and others force-stop apps
+ * in the background, and Android drops their accessibility service with them), and afterwards
+ * until it is handled: the phone's own steps, and the one-time grant that lets Island switch
+ * itself back on.
+ */
+@Composable
+private fun KeepOnCard(permissions: PermissionStatus, onHide: () -> Unit) {
+    val context = LocalContext.current
+    val glass = LocalGlass.current
+    val clipboard = LocalClipboardManager.current
+    val (oem, steps) = OemBatterySteps.forManufacturer()
+    var copied by remember { mutableStateOf(false) }
+    GlassCard(title = if (permissions.overlayDropped) "Island was switched off" else "Keep Island switched on") {
+        Column(Modifier.padding(horizontal = Space.rowPadding, vertical = Space.xs), verticalArrangement = Arrangement.spacedBy(Space.s)) {
+            Text(
+                "$oem stops apps in the background, and Android turns off their accessibility switch with them. To stop that:",
+                color = glass.content,
+                fontSize = 14.sp,
+            )
+            steps.forEachIndexed { i, step ->
+                Text("${i + 1}. $step", color = glass.contentSecondary, fontSize = 13.sp)
+            }
+            if (permissions.autoRestore) {
+                Text("Island turns itself back on when this happens.", color = glass.contentSecondary, fontSize = 13.sp)
+            } else {
+                Text(
+                    "Or let Island turn itself back on: run this once from a computer with USB debugging.",
+                    color = glass.content,
+                    fontSize = 14.sp,
+                )
+                Text(
+                    Permissions.restoreCommand(context),
+                    color = glass.content,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(glass.content.copy(alpha = 0.08f))
+                        .padding(Space.s),
+                )
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s), verticalArrangement = Arrangement.spacedBy(Space.s)) {
+                if (permissions.overlayDropped) {
+                    GlassPill("Turn on", { Permissions.openAccessibility(context) }, primary = true, compact = true)
+                }
+                GlassPill("Battery", { Permissions.requestBatteryExemption(context) }, compact = true)
+                if (!permissions.autoRestore) {
+                    GlassPill(if (copied) "Copied" else "Copy command", {
+                        clipboard.setText(AnnotatedString(Permissions.restoreCommand(context)))
+                        copied = true
+                    }, compact = true)
+                }
+                if (!permissions.overlayDropped) GlassPill("Hide", onHide, compact = true)
+            }
         }
     }
 }

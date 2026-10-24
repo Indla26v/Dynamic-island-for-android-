@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -131,6 +132,9 @@ fun IslandSurface(
     }
 
     val visibility by animateFloatAsState(if (state.visible) 1f else 0f, tween(160), label = "visibility")
+    // Once faded out (full-screen video, the shade, landscape), compose nothing: no waveform,
+    // ticking timer or spinner keeps drawing frames nobody can see.
+    val gone by remember { derivedStateOf { visibility == 0f } }
     // With the resting pill off, the shape shrinks onto the camera and then fades away; it comes
     // back instantly when something new arrives, so the morph still starts from the camera.
     val hiddenRest = state.mode == IslandMode.REST && !state.showsRestPill
@@ -172,6 +176,7 @@ fun IslandSurface(
             )
         },
     ) {
+        if (gone && !state.visible) return@Box
         Canvas(Modifier.fillMaxSize()) {
             val r = shape.value
             // 0 while a pill, 1 once it's a card: the pill is solid black so it merges with
