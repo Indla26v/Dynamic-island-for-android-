@@ -3,6 +3,8 @@
 
     <!-- Only for the "Send test notification" button. Island asks for no INTERNET permission. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Optional: contact photos for callers and chat senders that arrive without one. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <application>
         <service

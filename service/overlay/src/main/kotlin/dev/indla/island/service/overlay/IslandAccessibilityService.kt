@@ -141,7 +141,7 @@ class IslandAccessibilityService : AccessibilityService() {
         val cls = event.className?.toString().orEmpty()
         when {
             // Second opinion for skins whose shade isn't a full-height SystemUI window.
-            pkg == SYSTEM_UI -> if (looksLikeShade(event)) {
+            pkg == SYSTEM_UI -> if (!keyguard.isKeyguardLocked && looksLikeShade(event)) {
                 shadeFromEvents = true
                 updateEnvironment { it.copy(shadeOpen = true) }
             }
@@ -177,9 +177,15 @@ class IslandAccessibilityService : AccessibilityService() {
             if (bounds.top <= 0 && bounds.width() >= screenW * 0.8f && bounds.height() in 1..(screenH / 6).toInt()) statusBar = true
             if (bounds.height() >= screenH / 2 && bounds.width() >= screenW * 0.8f) shade = true
         }
-        val fullscreen = !statusBar && !shade && !engine.environment.locked
+        // The lock screen is itself a full-height SystemUI window; it isn't the shade, and the
+        // island belongs on it.
+        val locked = keyguard.isKeyguardLocked
+        if (locked) shadeFromEvents = false
+        val fullscreen = !statusBar && !shade && !locked
         // Either signal hides the island: window shapes differ between OEM skins.
-        updateEnvironment { it.copy(fullscreen = fullscreen, shadeOpen = shade || shadeFromEvents) }
+        updateEnvironment {
+            it.copy(fullscreen = fullscreen, shadeOpen = !locked && (shade || shadeFromEvents), locked = locked)
+        }
         if (debugLog) Log.d(TAG, "windows: statusBar=$statusBar shade=$shade -> ${engine.environment}")
     }
 

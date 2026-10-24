@@ -33,6 +33,8 @@ class NotificationExtractor @Inject constructor(
     @ApplicationContext private val context: Context,
     private val icons: IconStore,
     private val apps: AppInfoCache,
+    private val customViews: CustomViewReader,
+    private val contacts: ContactPhotos,
 ) {
     private val ranking = Ranking()
 
@@ -46,6 +48,14 @@ class NotificationExtractor @Inject constructor(
         val metric = metric(extras)
         // Android 16 promoted ongoing notifications may carry their glance as short critical text.
         val criticalText = extras.getCharSequence(EXTRA_SHORT_CRITICAL_TEXT)?.toString()
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+        val ongoing = sbn.isOngoing || n.flags and Notification.FLAG_FOREGROUND_SERVICE != 0
+        val showsChronometer = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)
+        // A timer drawn only as a custom view (vivo Clock): read its Chronometer.
+        val custom = if (ongoing && title == null && text == null && metric == null && !showsChronometer) customViews.timer(n) else null
+        val callPerson = callPerson(extras)
+        val caller = callPerson?.name?.toString() ?: title
 
         return RawNotification(
             key = sbn.key,
@@ -56,11 +66,11 @@ class NotificationExtractor @Inject constructor(
             isGroupSummary = n.flags and Notification.FLAG_GROUP_SUMMARY != 0,
             groupHasChildren = groupHasChildren,
             onlyAlertOnce = n.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0,
-            ongoing = sbn.isOngoing || n.flags and Notification.FLAG_FOREGROUND_SERVICE != 0,
+            ongoing = ongoing,
             category = n.category,
             channelId = n.channelId,
-            title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: metric?.label,
-            text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: criticalText,
+            title = title ?: metric?.label ?: custom?.label,
+            text = text ?: criticalText ?: custom?.shownTime,
             bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString(),
             subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString(),
             conversationTitle = style?.conversationTitle?.toString(),
@@ -88,15 +98,29 @@ class NotificationExtractor @Inject constructor(
             callCanDecline = extras.containsKey(Notification.EXTRA_DECLINE_INTENT),
             callCanHangUp = extras.containsKey(Notification.EXTRA_HANG_UP_INTENT),
             chronometerBase = when {
-                extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false) -> n.`when`.takeIf { it > 0 }
-                else -> metric?.baseWallMs
+                showsChronometer -> n.`when`.takeIf { it > 0 }
+                else -> metric?.baseWallMs ?: custom?.baseWallMs
             },
-            chronometerCountDown = extras.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN, false) || metric?.countDown == true,
-            largeIconKey = n.getLargeIcon()?.let { cacheIcon("$pkg|large|${sbn.key}", it) },
+            chronometerCountDown = extras.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN, false) ||
+                metric?.countDown == true || custom?.countDown == true,
+            largeIconKey = n.getLargeIcon()?.let { cacheIcon("$pkg|large|${sbn.key}", it) }
+                ?: callPerson?.icon?.let { cacheIcon("$pkg|caller|${sbn.key}", it) }
+                ?: if (n.category == Notification.CATEGORY_CALL) contacts.photoKey(caller, phoneOf(callPerson)) else null,
             appAccentArgb = apps.accent(pkg),
             isSelfTest = pkg == context.packageName && n.channelId == TestNotificationPoster.CHANNEL_ID,
         )
     }
+
+    /** CallStyle's caller: name, photo and (sometimes) a tel: URI. */
+    private fun callPerson(extras: Bundle): android.app.Person? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        extras.getParcelable(Notification.EXTRA_CALL_PERSON, android.app.Person::class.java)
+    } else {
+        @Suppress("DEPRECATION")
+        extras.getParcelable(Notification.EXTRA_CALL_PERSON)
+    }
+
+    private fun phoneOf(person: android.app.Person?): String? =
+        person?.uri?.takeIf { it.startsWith("tel:") }?.removePrefix("tel:")
 
     private class Metric(val label: String?, val baseWallMs: Long?, val countDown: Boolean)
 
@@ -140,7 +164,7 @@ class NotificationExtractor @Inject constructor(
                     iconKey = person.icon?.let { icon ->
                         val id = person.key ?: person.name?.toString() ?: return@let null
                         cacheIcon(IconStore.personKey(pkg, id), icon)
-                    },
+                    } ?: contacts.photoKey(person.name?.toString(), person.uri?.takeIf { it.startsWith("tel:") }?.removePrefix("tel:")),
                 ),
                 dataMimeType = m.dataMimeType,
             )

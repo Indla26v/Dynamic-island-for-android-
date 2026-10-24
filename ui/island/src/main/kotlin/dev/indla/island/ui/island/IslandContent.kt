@@ -1,5 +1,6 @@
 package dev.indla.island.ui.island
 
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -220,7 +221,7 @@ private fun ExpandedContent(
         when {
             state.quickActionsOpen -> QuickActions(item, registry)
             item.live is LiveContent.Call -> CallBody(item, item.live as LiveContent.Call, registry)
-            item.live is LiveContent.Media -> MediaBody(item, item.live as LiveContent.Media, registry)
+            item.live is LiveContent.Media -> MediaBody(item, item.live as LiveContent.Media, accent, registry)
             item.live is LiveContent.Progress -> ProgressBody(item, item.live as LiveContent.Progress, accent, registry)
             item.live is LiveContent.System -> SystemBody(item.live as LiveContent.System, accent)
             item.live is LiveContent.Timer -> TimerBody(item, item.live as LiveContent.Timer, registry)
@@ -383,7 +384,7 @@ private fun CallButton(action: IslandAction, registry: HitRegistry?) {
 
 /** Art, track and artist, a scrubber with elapsed and remaining, and transport controls. */
 @Composable
-private fun MediaBody(item: IslandItem, media: LiveContent.Media, registry: HitRegistry?) {
+private fun MediaBody(item: IslandItem, media: LiveContent.Media, accent: Color, registry: HitRegistry?) {
     Row(Modifier.fillMaxWidth().height(IslandLayout.MEDIA_ART.dp), verticalAlignment = Alignment.CenterVertically) {
         Art(item.avatarKey, item.packageName, IslandLayout.MEDIA_ART.dp, RoundedCornerShape(12.dp))
         Spacer(Modifier.width(14.dp))
@@ -405,8 +406,7 @@ private fun MediaBody(item: IslandItem, media: LiveContent.Media, registry: HitR
                 .then(if (media.canSeek && media.durationMs > 0) Modifier.hitRegion(registry, HitRegistry.MEDIA_SEEK) else Modifier),
             contentAlignment = Alignment.CenterStart,
         ) {
-            Box(Modifier.fillMaxWidth().height(5.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.25f)))
-            Box(Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(5.dp).clip(CircleShape).background(Color.White))
+            Scrubber(fraction.coerceIn(0f, 1f), accent, media.playing)
         }
         TimeLabel(if (media.durationMs > 0) "-" + formatDuration(media.durationMs - position) else "", Modifier.width(44.dp), end = true)
     }
@@ -420,6 +420,49 @@ private fun MediaBody(item: IslandItem, media: LiveContent.Media, registry: HitR
         MediaButton(Icons.Rounded.FastForward, "Next", media.canNext, 34.dp, registry, HitRegistry.MEDIA_NEXT)
     }
 }
+
+/**
+ * Island's own music bar: a soft track in the app's colour, a gradient fill that glides between
+ * position ticks, and a glowing thumb that breathes while playing. Tap or drag it to seek.
+ */
+@Composable
+private fun Scrubber(fraction: Float, accent: Color, playing: Boolean) {
+    val smooth by animateFloatAsState(fraction, tween(520, easing = androidx.compose.animation.core.LinearEasing), label = "scrub")
+    val glow by androidx.compose.animation.core.rememberInfiniteTransition(label = "glow").animateFloat(
+        initialValue = 0.25f,
+        targetValue = if (playing) 0.55f else 0.25f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(tween(900), androidx.compose.animation.core.RepeatMode.Reverse),
+        label = "glowAlpha",
+    )
+    val frozen = LocalFrozenTime.current != null
+    androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(18.dp)) {
+        val track = 6.dp.toPx()
+        val y = size.height / 2
+        val x = size.width * smooth
+        drawRoundRect(
+            accent.copy(alpha = 0.22f),
+            topLeft = androidx.compose.ui.geometry.Offset(0f, y - track / 2),
+            size = androidx.compose.ui.geometry.Size(size.width, track),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(track / 2),
+        )
+        if (x > 0f) {
+            drawRoundRect(
+                androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(accent.copy(alpha = 0.75f), lighten(accent)), endX = x.coerceAtLeast(1f)),
+                topLeft = androidx.compose.ui.geometry.Offset(0f, y - track / 2),
+                size = androidx.compose.ui.geometry.Size(x, track),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(track / 2),
+            )
+        }
+        drawCircle(accent.copy(alpha = if (frozen) 0.35f else glow), radius = 10.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, y))
+        drawCircle(Color.White, radius = 6.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, y))
+    }
+}
+
+private fun lighten(color: Color) = Color(
+    red = color.red + (1f - color.red) * 0.45f,
+    green = color.green + (1f - color.green) * 0.45f,
+    blue = color.blue + (1f - color.blue) * 0.45f,
+)
 
 @Composable
 private fun TimeLabel(text: String, modifier: Modifier, end: Boolean = false) {

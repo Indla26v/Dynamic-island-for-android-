@@ -124,8 +124,12 @@ fun IslandHitLayer(
                                 end = change.position
                                 if (!change.pressed) break
                             }
+                            val origin = Offset(latestOrigin.x.toFloat(), latestOrigin.y.toFloat())
                             if (latestState.positionEditing) {
                                 callbacks.onDragEnd()
+                            } else if (registry.find(start + origin) == HitRegistry.MEDIA_SEEK) {
+                                // Dragging along the music bar seeks to where the finger lifts.
+                                callbacks.onRegionTap(HitRegistry.MEDIA_SEEK, end + origin)
                             } else {
                                 val d = end - start
                                 val gesture = when {

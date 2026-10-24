@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.BatteryChargingFull
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Download
@@ -69,6 +70,7 @@ fun HomeScreen(
     onTryCall: () -> Unit,
     onTryDownload: () -> Unit,
     onTryMusic: () -> Unit,
+    onAllowContacts: () -> Unit,
     onOpenFixtures: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -157,6 +159,19 @@ fun HomeScreen(
                             onAppInfo = { Permissions.openAppInfo(context) },
                         )
                     }
+                }
+            }
+        }
+
+        if (!permissions.contacts) {
+            item {
+                GlassCard {
+                    GlassRow(
+                        "Show contact photos",
+                        subtitle = "Callers and senders without a picture get their contact photo",
+                        icon = Icons.Rounded.AccountCircle,
+                        onClick = onAllowContacts,
+                    ) { GlassPill("Allow", onAllowContacts, primary = true, compact = true) }
                 }
             }
         }

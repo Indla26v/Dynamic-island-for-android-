@@ -24,6 +24,8 @@ data class PermissionStatus(
     val postNotifications: Boolean = false,
     /** Android 13+ blocks the accessibility switch for apps installed from a file until allowed. */
     val restricted: Boolean = false,
+    /** Optional: caller and sender photos from the phone's contacts. */
+    val contacts: Boolean = false,
 ) {
     val essentials get() = notificationAccess && accessibility
 }
@@ -36,6 +38,7 @@ object Permissions {
         postNotifications = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
         restricted = restrictedSettings(context),
+        contacts = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED,
     )
 
     /**

@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
@@ -50,6 +51,7 @@ private val MorphSpring = spring<IslandRect>(dampingRatio = 0.8f, stiffness = Sp
 private const val FADE_OUT_MS = 90
 private const val CONTENT_DELAY_MS = 80L
 private const val FADE_IN_MS = 170
+private const val SLIDE_DP = 28f
 
 private val RectConverter = TwoWayConverter<IslandRect, AnimationVector4D>(
     convertToVector = { AnimationVector4D(it.left + it.width / 2, it.top, it.width, it.height) },
@@ -81,6 +83,10 @@ fun IslandSurface(
     val target = layout.rectFor(state)
     val shape = remember { Animatable(target, RectConverter) }
     val contentAlpha = remember { Animatable(1f) }
+    /** Horizontal slide (dp) of content when the island switches to another item. */
+    val contentShift = remember { Animatable(0f) }
+    /** A short spring "pop" of the whole island when something new arrives. */
+    val pulse = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
     var shown by remember { mutableStateOf(state) }
     val latest by rememberUpdatedState(state)
@@ -93,14 +99,35 @@ fun IslandSurface(
         // Launched outside this effect so a retarget keeps the running spring's velocity.
         scope.launch { shape.animateTo(target, MorphSpring) }
         if (changed) {
+            // Same state, different item (a swipe, or the island returning to a live activity):
+            // the new content slides in from the side instead of only fading.
+            val switching = shown.mode == latest.mode && shown.current != null && latest.current != null &&
+                shown.current?.key != latest.current?.key
             if (!shrinking) contentAlpha.animateTo(0f, tween(CONTENT_DELAY_MS.toInt()))
             else delay(CONTENT_DELAY_MS)
+            val forward = latest.items.indexOfFirst { it.key == latest.current?.key } >=
+                latest.items.indexOfFirst { it.key == shown.current?.key }
             shown = latest
+            if (switching) {
+                contentShift.snapTo(if (forward) SLIDE_DP else -SLIDE_DP)
+                launch { contentShift.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) }
+            }
             contentAlpha.animateTo(1f, tween(FADE_IN_MS))
         } else {
             shown = latest
             if (contentAlpha.value < 1f) contentAlpha.animateTo(1f, tween(FADE_IN_MS))
         }
+    }
+
+    // Pop when a new item takes the island (not on every update, not while expanded).
+    var poppedKey by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(state.current?.key, state.mode) {
+        val k = state.current?.key
+        if (k != null && k != poppedKey && state.mode != IslandMode.EXPANDED && state.currentIndex == 0) {
+            pulse.animateTo(1.07f, tween(110))
+            pulse.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMedium))
+        }
+        poppedKey = k
     }
 
     val visibility by animateFloatAsState(if (state.visible) 1f else 0f, tween(160), label = "visibility")
@@ -133,7 +160,18 @@ fun IslandSurface(
     val attached = layout.attachedToTop
     val edge = remember { GlassEdge() }
 
-    Box(modifier.fillMaxSize().graphicsLayer { alpha = visibility }) {
+    Box(
+        modifier.fillMaxSize().graphicsLayer {
+            alpha = visibility
+            scaleX = pulse.value
+            scaleY = pulse.value
+            // Grow from the camera, not from the window's centre.
+            transformOrigin = TransformOrigin(
+                (layout.centerX.dp.toPx() / size.width).coerceIn(0f, 1f),
+                (layout.top.dp.toPx() / size.height).coerceIn(0f, 1f),
+            )
+        },
+    ) {
         Canvas(Modifier.fillMaxSize()) {
             val r = shape.value
             // 0 while a pill, 1 once it's a card: the pill is solid black so it merges with
@@ -165,12 +203,14 @@ fun IslandSurface(
                     clip = true
                 },
         ) {
-            Box(
-                Modifier
-                    .offset(shownRect.left.dp, shownRect.top.dp)
-                    .requiredSize(shownRect.width.dp, shownRect.height.dp),
-            ) {
-                IslandContent(shown, layout, shownRect, accent, hitRegistry, drawReplyHint)
+            Box(Modifier.fillMaxSize().graphicsLayer { translationX = contentShift.value.dp.toPx() }) {
+                Box(
+                    Modifier
+                        .offset(shownRect.left.dp, shownRect.top.dp)
+                        .requiredSize(shownRect.width.dp, shownRect.height.dp),
+                ) {
+                    IslandContent(shown, layout, shownRect, accent, hitRegistry, drawReplyHint)
+                }
             }
         }
     }
