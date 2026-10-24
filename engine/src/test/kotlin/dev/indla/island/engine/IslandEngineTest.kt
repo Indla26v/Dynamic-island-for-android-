@@ -475,6 +475,19 @@ class IslandEngineTest {
     }
 
     @Test
+    fun headphones_openBriefly_batteryUpdatesInPlace_thenLeave() = test { h ->
+        val card = LiveContent.System(SystemEvent.HEADPHONES_CONNECTED, null, "Buds Pro", earbuds = true)
+        h.engine.onSystemEvent(card)
+        assertEquals("shown open, like AirPods", IslandMode.EXPANDED, h.state.mode)
+        advanceTimeBy(1_000); runCurrent()
+        h.engine.onSystemEvent(card.copy(level = 75))
+        assertEquals(IslandMode.EXPANDED, h.state.mode)
+        assertEquals(75, (h.state.current?.live as LiveContent.System).level)
+        advanceTimeBy(IslandEngine.SHOWCASE_MS); runCurrent()
+        assertEquals("gone, not lingering as a pill", IslandMode.REST, h.state.mode)
+    }
+
+    @Test
     fun systemEvent_isBrief_andRespectsSettings() = test { h ->
         h.engine.onSystemEvent(LiveContent.System(SystemEvent.CHARGING, 54, "54%"))
         assertEquals(ItemKind.SYSTEM, h.state.current?.kind)

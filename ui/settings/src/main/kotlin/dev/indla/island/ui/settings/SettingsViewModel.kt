@@ -14,8 +14,10 @@ import dev.indla.island.model.DefaultApps
 import dev.indla.island.model.GestureMap
 import dev.indla.island.model.IslandAppearance
 import dev.indla.island.model.IslandSettings
+import dev.indla.island.model.LiveContent
 import dev.indla.island.model.LiveSettings
 import dev.indla.island.model.ServiceHealth
+import dev.indla.island.model.SystemEvent
 import dev.indla.island.model.WhenToShow
 import dev.indla.island.service.listener.FixtureEntry
 import dev.indla.island.service.listener.FixtureRecorder
@@ -24,6 +26,7 @@ import dev.indla.island.service.listener.selftest.TestNotificationPoster
 import dev.indla.island.service.overlay.FrameStats
 import dev.indla.island.service.overlay.OverlayFrameStats
 import javax.inject.Inject
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -85,6 +88,16 @@ class SettingsViewModel @Inject constructor(
     fun tryDownload(): Boolean = poster.canPost().also { if (it) live.startDownload() }
 
     fun tryMusic() = live.playMusic()
+
+    /** The headphones card as a pair would raise it: connected first, battery a moment later. */
+    fun tryEarbuds() {
+        val card = LiveContent.System(SystemEvent.HEADPHONES_CONNECTED, null, "Island Buds Pro", earbuds = true)
+        engine.onSystemEvent(card)
+        viewModelScope.launch {
+            delay(900)
+            engine.onSystemEvent(card.copy(level = 75))
+        }
+    }
 
     fun acceptDisclosure() = update { it.copy(accessibilityDisclosureAccepted = true) }
 

@@ -312,8 +312,18 @@ class IslandEngine(
             live = event,
         )
         val existing = active.indexOfFirst { it.item.key == key }
+        // The same event with news (a pair's battery arriving after it connected): update the
+        // card where it is, without popping it again.
+        if (existing >= 0 && (active[existing].item.live as? LiveContent.System)?.stableKey == event.stableKey) {
+            active[existing].item = item
+            publish()
+            return
+        }
         if (existing >= 0) removeAt(existing)
-        insert(Active(item, clock() + SYSTEM_EVENT_MS, selfTest = false), autoExpand = false)
+        // Headphones connecting open up briefly to show the pair and its battery, then leave.
+        val showcase = event.event == SystemEvent.HEADPHONES_CONNECTED
+        insert(Active(item, clock() + if (showcase) SHOWCASE_MS else SYSTEM_EVENT_MS, selfTest = false), autoExpand = showcase && !busy())
+        if (showcase && expanded) expandedDeadline = clock() + SHOWCASE_MS
         publish()
     }
 
@@ -689,7 +699,8 @@ class IslandEngine(
         replyOpen = false
         quickActionsOpen = false
         val now = clock()
-        active.forEach { if (!it.persistent) it.expiresAt = maxOf(it.expiresAt, now + autoHideMs(it.item)) }
+        // A system glance keeps its own short life; collapsing doesn't buy it more.
+        active.forEach { if (!it.persistent && it.item.kind != ItemKind.SYSTEM) it.expiresAt = maxOf(it.expiresAt, now + autoHideMs(it.item)) }
         // What the user paged through in the pile has been seen.
         missedPile()?.let { pile ->
             pile.pages.removeAll { it.key in pile.viewed }
@@ -840,6 +851,8 @@ class IslandEngine(
     companion object {
         const val EXPANDED_IDLE_MS = 8_000L
         const val SYSTEM_EVENT_MS = 3_000L
+        /** How long the headphones card stays open. */
+        const val SHOWCASE_MS = 3_500L
         /** How long paused media stays before it leaves the island. */
         const val LIVE_LINGER_MS = 10_000L
         const val MAX_ITEMS = 5

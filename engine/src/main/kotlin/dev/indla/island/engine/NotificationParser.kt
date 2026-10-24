@@ -75,7 +75,12 @@ class NotificationParser(
     fun isTimer(raw: RawNotification): Boolean =
         raw.category == "stopwatch" ||
             (raw.chronometerBase != null && raw.ongoing) ||
-            (raw.ongoing && (raw.category == "alarm" || raw.packageName in CLOCK_PACKAGES))
+            (raw.ongoing && (raw.category == "alarm" || raw.packageName in CLOCK_PACKAGES || isRecording(raw)))
+
+    /** Voice recorders and screen recorders: their chronometer is the recording's length. */
+    fun isRecording(raw: RawNotification): Boolean =
+        RECORDER_PACKAGE.containsMatchIn(raw.packageName) ||
+            listOfNotNull(raw.title, raw.text, raw.appLabel).any { RECORDING.containsMatchIn(it) }
 
     private fun timerItem(raw: RawNotification): IslandItem {
         val title = raw.title?.trim().orEmpty()
@@ -86,14 +91,20 @@ class NotificationParser(
             TIME.matches(text) -> text to title.ifEmpty { "Timer" }
             else -> "" to title.ifEmpty { text.ifEmpty { "Timer" } }
         }
-        val countDown = raw.chronometerCountDown ||
-            (raw.category != "stopwatch" && !label.contains("stopwatch", ignoreCase = true))
+        val recording = isRecording(raw)
+        // Counting down only when the app says so, the base is still ahead (a timer's end), or
+        // it's a clock app's timer. Recorders and stopwatches count up.
+        val countDown = !recording && (
+            raw.chronometerCountDown ||
+                (raw.chronometerBase?.let { it > raw.postTime + 1_000 } == true) ||
+                (raw.packageName in CLOCK_PACKAGES && raw.category != "stopwatch" && !label.contains("stopwatch", ignoreCase = true))
+            )
         return baseItem(raw).copy(
             kind = ItemKind.TIMER,
             title = label,
             glance = time,
             lines = emptyList(),
-            live = LiveContent.Timer(label, raw.chronometerBase, countDown, time),
+            live = LiveContent.Timer(label, raw.chronometerBase, countDown, time, recording),
         )
     }
 
@@ -353,6 +364,9 @@ class NotificationParser(
 
         /** System plumbing that never belongs on the island. */
         val SYSTEM_CATEGORIES = setOf("service", "sys", "alarm", "stopwatch")
+
+        val RECORDER_PACKAGE = Regex("(?i)recorder|voicenote|voicememo")
+        val RECORDING = Regex("(?i)\\brecord(ing|er)\\b")
 
         /** Clock apps whose ongoing notifications are timers or stopwatches. */
         val CLOCK_PACKAGES = setOf(

@@ -8,6 +8,7 @@ import dev.indla.island.model.ItemKind
 import dev.indla.island.model.LiveContent
 import dev.indla.island.model.MessageLine
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -175,6 +176,15 @@ class NotificationParserTest {
         assertEquals("14:04", timer.staticTime)
         assertTrue(timer.countDown)
         assertEquals(listOf("Pause", "Add 1 minute"), item.actions.map { it.title })
+    }
+
+    @Test
+    fun recorder_countsUp_asARecording() {
+        val item = show(Fixtures.vivoRecorder())
+        assertEquals(ItemKind.TIMER, item.kind)
+        val rec = item.live as LiveContent.Timer
+        assertTrue(rec.recording)
+        assertFalse("a recording's length counts up, never -0:16", rec.countDown)
     }
 
     @Test

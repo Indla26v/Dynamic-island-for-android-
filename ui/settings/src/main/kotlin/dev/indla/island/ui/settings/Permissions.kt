@@ -27,6 +27,8 @@ data class PermissionStatus(
     val restricted: Boolean = false,
     /** Optional: caller and sender photos from the phone's contacts. */
     val contacts: Boolean = false,
+    /** Optional (Nearby devices): headphones' own name and battery when they connect. */
+    val bluetooth: Boolean = false,
     /** The overlay ran before and is off now: the phone force-stopped Island. */
     val overlayDropped: Boolean = false,
     /** WRITE_SECURE_SETTINGS was granted over adb, so Island switches itself back on. */
@@ -52,6 +54,8 @@ object Permissions {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
         restricted = restrictedSettings(context),
         contacts = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED,
+        bluetooth = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED,
         overlayDropped = dropped,
         autoRestore = OverlayKeeper.canRestore(context),
         keepOnTips = OverlayKeeper.showTips(context),

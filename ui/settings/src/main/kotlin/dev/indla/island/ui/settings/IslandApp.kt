@@ -69,7 +69,7 @@ fun IslandApp(showDebug: Boolean) {
         vm.refreshPermissions()
         if (granted) vm.sendTestNotification()
     }
-    val contactsPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+    val optionalPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         vm.refreshPermissions()
     }
     val askNotifications = {
@@ -127,7 +127,11 @@ fun IslandApp(showDebug: Boolean) {
                                 onTryCall = { if (!vm.tryCall()) askNotifications() },
                                 onTryDownload = { if (!vm.tryDownload()) askNotifications() },
                                 onTryMusic = vm::tryMusic,
-                                onAllowContacts = { contactsPermission.launch(Manifest.permission.READ_CONTACTS) },
+                                onTryEarbuds = vm::tryEarbuds,
+                                onAllowContacts = { optionalPermission.launch(Manifest.permission.READ_CONTACTS) },
+                                onAllowBluetooth = {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) optionalPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                                },
                                 onOpenFixtures = { showFixtures = true },
                             )
                             1 -> AppsScreen(

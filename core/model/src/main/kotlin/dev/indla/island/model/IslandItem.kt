@@ -146,17 +146,23 @@ sealed interface LiveContent {
         val countDown: Boolean,
         /** What the app shows while paused ("14:04"). */
         val staticTime: String,
+        /** A voice or screen recording: counts up, drawn as a live waveform. */
+        val recording: Boolean = false,
     ) : LiveContent {
         override val stableKey get() = listOf(label, baseMs == null)
     }
 
     data class System(
         val event: SystemEvent,
-        /** Battery percent for charging/battery events. */
+        /** Battery percent: the phone's for charging events, the pair's for headphones. */
         val level: Int?,
+        /** What to say: a percentage, a ringer mode, or the headphones' name. */
         val label: String,
+        /** Headphones that are earbuds (drawn as earbuds, not a headband). */
+        val earbuds: Boolean = false,
     ) : LiveContent {
-        override val stableKey get() = listOf(event, level, label)
+        // A battery report arriving after the connection updates the card; it isn't a new event.
+        override val stableKey get() = if (event == SystemEvent.HEADPHONES_CONNECTED) listOf(event, label) else listOf(event, level, label)
     }
 }
 

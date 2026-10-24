@@ -235,6 +235,19 @@ object Fixtures {
         actions = listOf(RawAction(0, "Pause"), RawAction(1, "Add 1 minute")),
     )
 
+    /** vivo Recorder while recording: a counting-up chronometer in a custom view. */
+    fun vivoRecorder() = RawNotification(
+        key = "0|com.android.bbksoundrecorder|1|null|10077",
+        packageName = "com.android.bbksoundrecorder",
+        appLabel = "Recorder",
+        postTime = 20_000,
+        ongoing = true,
+        onlyAlertOnce = true,
+        title = "Recorder",
+        chronometerBase = 20_000L - 16_000,
+        actions = listOf(RawAction(0, "Pause"), RawAction(1, "Save")),
+    )
+
     fun silent(base: RawNotification = whatsAppDirect()) =
         base.copy(ranking = RawRanking(importance = Importance.LOW))
 

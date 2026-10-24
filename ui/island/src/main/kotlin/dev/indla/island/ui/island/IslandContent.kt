@@ -41,6 +41,7 @@ import androidx.compose.material.icons.rounded.CallEnd
 import androidx.compose.material.icons.rounded.ChatBubble
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Earbuds
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Headphones
@@ -66,6 +67,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -85,6 +87,7 @@ import dev.indla.island.model.ItemKind
 import dev.indla.island.model.LiveContent
 import dev.indla.island.model.SystemEvent
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 private val Secondary = Color(0xA6FFFFFF)
@@ -145,9 +148,28 @@ private fun RowScope.CompactLeading(item: IslandItem, size: Dp, accent: Color) {
         } else {
             ItemAvatar(item, item.avatarKey, size)
         }
-        is LiveContent.System -> Icon(systemIcon(live.event), null, tint = systemColor(live.event, accent), modifier = Modifier.size(size * 0.85f))
+        is LiveContent.System -> if (live.event == SystemEvent.HEADPHONES_CONNECTED) {
+            Icon(headphonesIcon(live), null, tint = Color.White, modifier = Modifier.size(size * 0.85f))
+        } else {
+            SystemIcon(live.event, systemColor(live.event, accent), size * 0.85f)
+        }
         is LiveContent.Progress -> ItemIcon(item, size)
-        is LiveContent.Timer -> Icon(Icons.Rounded.Timer, null, tint = TimerOrange, modifier = Modifier.size(size * 0.85f))
+        is LiveContent.Timer -> if (live.recording) {
+            RecordDot(live.baseMs != null, size * 0.7f)
+            Spacer(Modifier.width(4.dp))
+            RecordingWave(live.baseMs, Modifier.size(30.dp, size * 0.7f), playhead = 1f, bar = 1.5.dp, step = 3.dp)
+        } else {
+            val tick = tickScale(live.baseMs != null)
+            Icon(
+                Icons.Rounded.Timer,
+                null,
+                tint = TimerOrange,
+                modifier = Modifier.size(size * 0.85f).graphicsLayer {
+                    scaleX = tick
+                    scaleY = tick
+                },
+            )
+        }
         null -> ItemAvatar(item, item.avatarKey, size)
     }
 }
@@ -177,8 +199,13 @@ private fun RowScope.CompactTrailing(item: IslandItem, accent: Color, minimal: B
     when (val live = item.live) {
         is LiveContent.Media -> WaveBars(accent, live.playing, Modifier.size(22.dp, 16.dp))
         is LiveContent.Call -> when (live.state) {
-            CallState.ONGOING -> WaveBars(CallGreen, true, Modifier.size(22.dp, 16.dp))
-            else -> GlanceText(item.glance, CallGreen)
+            CallState.ONGOING -> VoiceWave(CallGreen, Modifier.size(24.dp, 16.dp))
+            else -> {
+                val angle = ringingAngle()
+                Icon(Icons.Rounded.Call, null, tint = CallGreen, modifier = Modifier.size(16.dp).graphicsLayer { rotationZ = angle })
+                Spacer(Modifier.width(4.dp))
+                GlanceText(item.glance, CallGreen)
+            }
         }
         is LiveContent.Progress -> {
             if (item.glance.isNotEmpty() && !minimal) {
@@ -189,11 +216,13 @@ private fun RowScope.CompactTrailing(item: IslandItem, accent: Color, minimal: B
         }
         is LiveContent.Timer -> {
             val now by rememberNow()
-            GlanceText(live.display(now), TimerOrange)
+            GlanceText(live.display(now), if (live.recording) RecordRed else TimerOrange)
         }
         is LiveContent.System -> {
             val color = systemColor(live.event, accent)
-            if (live.level != null) {
+            if (live.event == SystemEvent.HEADPHONES_CONNECTED && live.level != null) {
+                BatteryRing(live.level!!, 22.dp)
+            } else if (live.level != null) {
                 GlanceText(live.label, color)
                 Spacer(Modifier.width(6.dp))
                 ProgressRing(live.level!! / 100f, color, Modifier.size(18.dp))
@@ -656,11 +685,16 @@ private fun ProgressBody(item: IslandItem, progress: LiveContent.Progress, accen
 /** Charging, ringer or headphones, larger: a ring around the icon and a label. */
 @Composable
 private fun SystemBody(system: LiveContent.System, accent: Color) {
+    if (system.event == SystemEvent.HEADPHONES_CONNECTED) {
+        HeadphonesBody(system)
+        return
+    }
     val color = systemColor(system.event, accent)
+    val reveal = rememberReveal()
     Row(Modifier.fillMaxWidth().height(IslandLayout.SYSTEM_ROW.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-            system.level?.let { ProgressRing(it / 100f, color, Modifier.size(48.dp), stroke = 4.dp) }
-            Icon(systemIcon(system.event), null, tint = color, modifier = Modifier.size(24.dp))
+            system.level?.let { ProgressRing(it / 100f * reveal, color, Modifier.size(48.dp), stroke = 4.dp) }
+            SystemIcon(system.event, color, 24.dp)
         }
         Spacer(Modifier.width(14.dp))
         Column {
@@ -669,6 +703,76 @@ private fun SystemBody(system: LiveContent.System, accent: Color) {
         }
     }
 }
+
+/** Like AirPods on iPhone: the pair, "Connected" over its name, and its battery in a ring. */
+@Composable
+private fun HeadphonesBody(system: LiveContent.System) {
+    Row(Modifier.fillMaxWidth().height(IslandLayout.SYSTEM_ROW.dp), verticalAlignment = Alignment.CenterVertically) {
+        val nod = rememberShake()
+        Icon(headphonesIcon(system), null, tint = Color.White, modifier = Modifier.size(36.dp).graphicsLayer { rotationZ = 10f * nod })
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Connected", color = Secondary, fontSize = 13.sp, maxLines = 1)
+            Text(system.label, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        system.level?.let { level ->
+            Spacer(Modifier.width(12.dp))
+            BatteryRing(level, 44.dp)
+        }
+    }
+}
+
+/** Battery as a ring with the number inside: green, amber under 30, red under 15. */
+@Composable
+private fun BatteryRing(level: Int, size: Dp) {
+    val color = batteryColor(level)
+    val reveal = rememberReveal()
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        ProgressRing(level / 100f * reveal, color, Modifier.size(size), stroke = size * 0.08f)
+        Text("${(level * reveal).roundToInt()}", color = color, fontSize = (size.value * 0.36f).sp, fontWeight = FontWeight.SemiBold, style = Tabular)
+    }
+}
+
+/**
+ * System glances with their own motion: the bolt flashes, the bell swings, the phone buzzes
+ * side to side, silent mode settles, headphones nod.
+ */
+@Composable
+private fun SystemIcon(event: SystemEvent, color: Color, size: Dp) {
+    val shake = rememberShake()
+    val flash = rememberReveal(700)
+    Icon(
+        systemIcon(event),
+        null,
+        tint = color,
+        modifier = Modifier.size(size).graphicsLayer {
+            when (event) {
+                SystemEvent.RINGER_NORMAL -> {
+                    rotationZ = 22f * shake
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.1f)
+                }
+                SystemEvent.RINGER_VIBRATE -> translationX = 3.dp.toPx() * kotlin.math.sin(flash * 18 * kotlin.math.PI).toFloat() * (1f - flash)
+                SystemEvent.RINGER_SILENT -> alpha = 0.4f + 0.6f * flash
+                SystemEvent.CHARGING -> {
+                    val pop = 1f + 0.35f * kotlin.math.sin(flash * kotlin.math.PI).toFloat()
+                    scaleX = pop
+                    scaleY = pop
+                }
+                SystemEvent.HEADPHONES_CONNECTED, SystemEvent.HEADPHONES_DISCONNECTED -> rotationZ = 10f * shake
+                else -> Unit
+            }
+        },
+    )
+}
+
+private fun batteryColor(level: Int) = when {
+    level < 15 -> DeclineRed
+    level < 30 -> TimerOrange
+    else -> CallGreen
+}
+
+private fun headphonesIcon(system: LiveContent.System): ImageVector =
+    if (system.earbuds) Icons.Rounded.Earbuds else Icons.Rounded.Headphones
 
 @Composable
 private fun QuickActions(item: IslandItem, registry: HitRegistry?) {
@@ -690,14 +794,45 @@ private fun QuickActions(item: IslandItem, registry: HitRegistry?) {
 @Composable
 private fun TimerBody(item: IslandItem, timer: LiveContent.Timer, registry: HitRegistry?) {
     val now by rememberNow()
+    if (timer.recording) {
+        // The Recorder app's own look: the waveform running into a red playhead, then the time.
+        Row(Modifier.fillMaxWidth().height(IslandLayout.CALL_ROW.dp), verticalAlignment = Alignment.CenterVertically) {
+            RecordDot(timer.baseMs != null, 18.dp)
+            Spacer(Modifier.width(10.dp))
+            RecordingWave(timer.baseMs, Modifier.weight(1f).height(40.dp))
+            Spacer(Modifier.width(14.dp))
+            Text(timer.display(now), color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Light, style = Tabular, maxLines = 1)
+        }
+        TimerActions(item, registry)
+        return
+    }
     Row(Modifier.fillMaxWidth().height(IslandLayout.CALL_ROW.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(46.dp).clip(CircleShape).background(TimerOrange.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.Timer, null, tint = TimerOrange, modifier = Modifier.size(26.dp))
+            val running = timer.baseMs != null
+            // A sweep for the seconds of the current minute, and a tick on each one.
+            val now30 by rememberTicker(running)
+            val sweep = if (running) (now30 % 60_000) / 60_000f else 0f
+            ProgressRing(if (timer.countDown) 1f - sweep else sweep, TimerOrange, Modifier.size(46.dp), stroke = 2.5.dp)
+            val tick = tickScale(running)
+            Icon(
+                Icons.Rounded.Timer,
+                null,
+                tint = TimerOrange,
+                modifier = Modifier.size(26.dp).graphicsLayer {
+                    scaleX = tick
+                    scaleY = tick
+                },
+            )
         }
         Spacer(Modifier.width(12.dp))
         Text(timer.label, color = Secondary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         Text(timer.display(now), color = TimerOrange, fontSize = 30.sp, fontWeight = FontWeight.SemiBold, style = Tabular, maxLines = 1)
     }
+    TimerActions(item, registry)
+}
+
+@Composable
+private fun TimerActions(item: IslandItem, registry: HitRegistry?) {
     if (item.actions.isNotEmpty()) {
         Spacer(Modifier.height(IslandLayout.GAP.dp))
         ButtonRow {

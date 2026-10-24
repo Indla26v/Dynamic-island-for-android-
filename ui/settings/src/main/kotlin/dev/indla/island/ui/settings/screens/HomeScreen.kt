@@ -24,6 +24,7 @@ import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
@@ -79,7 +80,9 @@ fun HomeScreen(
     onTryCall: () -> Unit,
     onTryDownload: () -> Unit,
     onTryMusic: () -> Unit,
+    onTryEarbuds: () -> Unit,
     onAllowContacts: () -> Unit,
+    onAllowBluetooth: () -> Unit,
     onOpenFixtures: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -198,6 +201,19 @@ fun HomeScreen(
             }
         }
 
+        if (!permissions.bluetooth) {
+            item {
+                GlassCard {
+                    GlassRow(
+                        "Show headphone battery",
+                        subtitle = "Your earbuds' name and charge when they connect (Nearby devices)",
+                        icon = Icons.Rounded.Headphones,
+                        onClick = onAllowBluetooth,
+                    ) { GlassPill("Allow", onAllowBluetooth, primary = true, compact = true) }
+                }
+            }
+        }
+
         item {
             GlassCard(title = "Try it") {
                 // Real notifications and a real media session, through the same path as any app.
@@ -210,6 +226,7 @@ fun HomeScreen(
                     GlassChip("Call", onTryCall, Icons.Rounded.Call)
                     GlassChip("Download", onTryDownload, Icons.Rounded.Download)
                     GlassChip("Music", onTryMusic, Icons.Rounded.MusicNote)
+                    GlassChip("Earbuds", onTryEarbuds, Icons.Rounded.Headphones)
                 }
                 Text(
                     "Leave Island after starting music or a call to see it on the island.",
