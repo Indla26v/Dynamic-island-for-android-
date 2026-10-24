@@ -104,6 +104,8 @@ class IslandEngine(
     private var timer: Job? = null
     /** Digital Wellbeing's "Bedtime mode is on" notification, while it's up. */
     private var bedtimeKey: String? = null
+    /** Link to Windows' ongoing "connected" notification, while it's up. */
+    private var linkKey: String? = null
 
     /** key -> content hash of everything posted and not yet removed; bounded. */
     private val seen = object : LinkedHashMap<String, Int>(64, 0.75f, true) {
@@ -145,6 +147,14 @@ class IslandEngine(
             if (bedtimeKey != raw.key) {
                 bedtimeKey = raw.key
                 onSystemEvent(LiveContent.System(SystemEvent.BEDTIME_ON, null, raw.text?.trim()?.takeIf { it.isNotEmpty() } ?: "On"))
+            }
+            return
+        }
+        if (isLinkToWindows(raw)) {
+            // Link to Windows says it's connected to a PC: a glance, not a card.
+            if (linkKey != raw.key) {
+                linkKey = raw.key
+                onSystemEvent(LiveContent.System(SystemEvent.LINK_ON, null, raw.text?.trim()?.takeIf { it.isNotEmpty() } ?: "Connected"))
             }
             return
         }
@@ -258,6 +268,11 @@ class IslandEngine(
     }
 
     fun onRemoved(key: String) {
+        if (key == linkKey) {
+            linkKey = null
+            onSystemEvent(LiveContent.System(SystemEvent.LINK_OFF, null, "Disconnected"))
+            return
+        }
         if (key == bedtimeKey) {
             bedtimeKey = null
             onSystemEvent(LiveContent.System(SystemEvent.BEDTIME_OFF, null, "Off"))
@@ -937,6 +952,12 @@ class IslandEngine(
         private const val WELLBEING = "com.google.android.apps.wellbeing"
         private val BEDTIME = Regex("(?i)bedtime")
 
+        private const val LINK_TO_WINDOWS = "com.microsoft.appmanager"
+        private val CONNECTED = Regex("(?i)connected|linked|syncing")
+
+        private fun isLinkToWindows(raw: RawNotification) = raw.packageName == LINK_TO_WINDOWS && raw.ongoing &&
+            listOfNotNull(raw.title, raw.text).any { CONNECTED.containsMatchIn(it) }
+
         private fun isBedtime(raw: RawNotification) = raw.packageName == WELLBEING && raw.ongoing &&
             listOfNotNull(raw.title, raw.text).any { BEDTIME.containsMatchIn(it) }
 
@@ -956,6 +977,9 @@ class IslandEngine(
             SystemEvent.BEDTIME_ON, SystemEvent.BEDTIME_OFF -> "bedtime"
             SystemEvent.DATA_ON, SystemEvent.DATA_OFF -> "data"
             SystemEvent.UNLOCKED, SystemEvent.AUTH_FAILED -> "auth"
+            SystemEvent.HOTSPOT_ON, SystemEvent.HOTSPOT_OFF -> "hotspot"
+            SystemEvent.EYE_ON, SystemEvent.EYE_OFF -> "eye"
+            SystemEvent.LINK_ON, SystemEvent.LINK_OFF -> "link"
         }
     }
 }

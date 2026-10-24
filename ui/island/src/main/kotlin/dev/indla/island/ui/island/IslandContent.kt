@@ -324,7 +324,7 @@ private fun ExpandedContent(
 ) {
     val pad = 18f
     if (layout.isSlimGlance(state) && item.live is LiveContent.System) {
-        SlimGlance(item.live as LiveContent.System, layout, rect, accent)
+        SlimGlance(item, item.live as LiveContent.System, layout, rect, accent, registry)
         return
     }
     Box(Modifier.fillMaxSize()) {
@@ -829,7 +829,7 @@ private fun SystemBody(item: IslandItem, system: LiveContent.System, accent: Col
  * with its battery ring on the right.
  */
 @Composable
-private fun SlimGlance(system: LiveContent.System, layout: IslandLayout, rect: IslandRect, accent: Color) {
+private fun SlimGlance(item: IslandItem, system: LiveContent.System, layout: IslandLayout, rect: IslandRect, accent: Color, registry: HitRegistry?) {
     val pad = 16f
     val camera = layout.cameraOffsetIn(rect)
     val gap = layout.cameraGap
@@ -870,6 +870,18 @@ private fun SlimGlance(system: LiveContent.System, layout: IslandLayout, rect: I
                     SceneArgs(system.level, color, system.label, system.device, face = system.level == FACE),
                     Modifier.weight(1f).fillMaxHeight(),
                 )
+            }
+            // Inline buttons: the flashlight's off switch.
+            item.actions.forEach { action ->
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF3A3A3C))
+                        .hitRegion(registry, HitRegistry.action(action.index)),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Rounded.FlashlightOff, action.title, tint = Color.White, modifier = Modifier.size(20.dp)) }
             }
         }
     }

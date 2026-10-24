@@ -68,6 +68,12 @@ internal fun SystemScene(event: SystemEvent, args: SceneArgs, modifier: Modifier
         SystemEvent.UNLOCKED -> UnlockScene(args.face, ok = true, modifier)
         SystemEvent.AUTH_FAILED -> UnlockScene(args.face, ok = false, modifier)
         SystemEvent.CLIPBOARD -> ClipboardScene(args, modifier)
+        SystemEvent.HOTSPOT_ON -> HotspotScene(on = true, modifier)
+        SystemEvent.HOTSPOT_OFF -> HotspotScene(on = false, modifier)
+        SystemEvent.EYE_ON -> EyeScene(on = true, modifier)
+        SystemEvent.EYE_OFF -> EyeScene(on = false, modifier)
+        SystemEvent.LINK_ON -> LinkScene(on = true, modifier)
+        SystemEvent.LINK_OFF -> LinkScene(on = false, modifier)
     }
 }
 

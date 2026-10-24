@@ -126,28 +126,64 @@ internal class TorchSignal(context: Context, private val emit: Emit) : SignalSou
     }
 }
 
-/** vivo / iQOO Monster mode, kept in a vendor system setting. */
-internal class MonsterSignal(context: Context, emit: Emit) : SettingSignal(context, emit) {
-    private var state: Int? = null
+/**
+ * A phone switch that lives in a system setting as 0 / 1 (vivo's Monster mode, the hotspot,
+ * Eye Protection). One class for all of them: which setting, and which glance on and off.
+ */
+internal class ToggleSettingSignal(
+    context: Context,
+    emit: Emit,
+    private val name: String,
+    private val table: Table,
+    private val onEvent: SystemEvent,
+    private val offEvent: SystemEvent,
+) : SettingSignal(context, emit) {
+    enum class Table { SYSTEM, GLOBAL, SECURE }
 
-    override val uris = listOf(Settings.System.getUriFor(KEY))
+    private var state: Boolean? = null
+
+    override val uris = listOf(
+        when (table) {
+            Table.SYSTEM -> Settings.System.getUriFor(name)
+            Table.GLOBAL -> Settings.Global.getUriFor(name)
+            Table.SECURE -> Settings.Secure.getUriFor(name)
+        },
+    )
 
     override fun prime() {
         state = read()
+        // Says once whether Android lets Island read this switch at all.
+        android.util.Log.i(TAG, "$name (${table.name.lowercase()}) = ${state ?: "unreadable"}")
     }
 
     override fun onSettled() {
         val now = read() ?: return
         val before = state
         state = now
-        if (before == null || before == now) return
-        emit(LiveContent.System(if (now != 0) SystemEvent.MONSTER_ON else SystemEvent.MONSTER_OFF, null, onOff(now != 0)))
+        if (before == now) return
+        emit(LiveContent.System(if (now) onEvent else offEvent, null, onOff(now)))
     }
 
-    private fun read(): Int? = runCatching { Settings.System.getInt(context.contentResolver, KEY) }.getOrNull()
+    private fun read(): Boolean? = runCatching {
+        val resolver = context.contentResolver
+        when (table) {
+            Table.SYSTEM -> Settings.System.getInt(resolver, name)
+            Table.GLOBAL -> Settings.Global.getInt(resolver, name)
+            Table.SECURE -> Settings.Secure.getInt(resolver, name)
+        } != 0
+    }.getOrNull()
 
-    private companion object {
-        const val KEY = "pemMonsterState"
+    companion object {
+        private const val TAG = "IslandSignals"
+
+        fun monster(context: Context, emit: Emit) =
+            ToggleSettingSignal(context, emit, "pemMonsterState", Table.SYSTEM, SystemEvent.MONSTER_ON, SystemEvent.MONSTER_OFF)
+
+        fun hotspot(context: Context, emit: Emit) =
+            ToggleSettingSignal(context, emit, "soft_ap_on", Table.GLOBAL, SystemEvent.HOTSPOT_ON, SystemEvent.HOTSPOT_OFF)
+
+        fun eyeProtection(context: Context, emit: Emit) =
+            ToggleSettingSignal(context, emit, "night_display_activated", Table.SECURE, SystemEvent.EYE_ON, SystemEvent.EYE_OFF)
     }
 }
 

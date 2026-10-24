@@ -42,7 +42,9 @@ data class PermissionStatus(
 object Permissions {
     fun status(context: Context): PermissionStatus {
         val dropped = OverlayKeeper.wasOn(context) && !accessibilityEnabled(context)
-        if (dropped) OverlayKeeper.noteDropped(context)
+        // Updating the app switches the service off for a moment; that isn't the phone dropping
+        // it, so it doesn't bring back the keep-it-on tips.
+        if (dropped && !justUpdated(context)) OverlayKeeper.noteDropped(context)
         return snapshot(context, dropped)
     }
 
@@ -60,6 +62,12 @@ object Permissions {
         autoRestore = OverlayKeeper.canRestore(context),
         keepOnTips = OverlayKeeper.showTips(context),
     )
+
+    private fun justUpdated(context: Context): Boolean = runCatching {
+        System.currentTimeMillis() - context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime < UPDATE_GRACE_MS
+    }.getOrDefault(false)
+
+    private const val UPDATE_GRACE_MS = 2 * 60_000L
 
     /** The one-time command that lets Island switch its accessibility service back on. */
     fun restoreCommand(context: Context) = "adb shell pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS"

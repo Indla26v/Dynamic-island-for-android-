@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DoNotDisturbOn
@@ -43,7 +44,9 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -194,6 +197,9 @@ private fun LiveCard(live: LiveSettings, onLive: ((LiveSettings) -> LiveSettings
             GlassChip("Bedtime", { onLive { it.copy(bedtime = !it.bedtime) } }, Icons.Rounded.Bedtime, live.bedtime)
             GlassChip("Mobile data", { onLive { it.copy(mobileData = !it.mobileData) } }, Icons.Rounded.SwapVert, live.mobileData)
             GlassChip("Face / fingerprint", { onLive { it.copy(unlock = !it.unlock) } }, Icons.Rounded.Fingerprint, live.unlock)
+            GlassChip("Hotspot", { onLive { it.copy(hotspot = !it.hotspot) } }, Icons.Rounded.WifiTethering, live.hotspot)
+            GlassChip("Eye protection", { onLive { it.copy(eyeProtection = !it.eyeProtection) } }, Icons.Rounded.Visibility, live.eyeProtection)
+            GlassChip("Link to Windows", { onLive { it.copy(linkToWindows = !it.linkToWindows) } }, Icons.Rounded.Computer, live.linkToWindows)
         }
     }
 }

@@ -187,3 +187,29 @@ internal class HeadphoneSignal(private val context: Context, private val emit: E
         )
     }
 }
+
+/**
+ * The hotspot from the system's soft-AP broadcast (the state setting may be unreadable on some
+ * skins); 13 is enabled, 11 disabled.
+ */
+internal class HotspotBroadcastSignal(context: Context, emit: Emit) : BroadcastSignal(context, emit) {
+    private var on: Boolean? = null
+
+    override val actions = listOf(ACTION)
+
+    override fun onBroadcast(intent: Intent, initial: Boolean) {
+        val now = when (intent.getIntExtra("wifi_state", -1)) {
+            13 -> true
+            11 -> false
+            else -> return
+        }
+        val before = on
+        on = now
+        if (initial || before == null || before == now) return
+        emit(LiveContent.System(if (now) SystemEvent.HOTSPOT_ON else SystemEvent.HOTSPOT_OFF, null, onOff(now)))
+    }
+
+    private companion object {
+        const val ACTION = "android.net.wifi.WIFI_AP_STATE_CHANGED"
+    }
+}

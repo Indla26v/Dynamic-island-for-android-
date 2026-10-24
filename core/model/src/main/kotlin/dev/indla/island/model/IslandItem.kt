@@ -219,6 +219,14 @@ enum class SystemEvent {
     /** Unlocked; the label says how ("Face" / "Fingerprint") when known. */
     UNLOCKED,
     AUTH_FAILED,
+    HOTSPOT_ON,
+    HOTSPOT_OFF,
+    /** vivo Eye Protection / Android Night Light. */
+    EYE_ON,
+    EYE_OFF,
+    /** Microsoft Link to Windows connected to a PC. */
+    LINK_ON,
+    LINK_OFF,
 }
 
 /** A media session as the listener sees it; the engine turns it into a MEDIA item. */

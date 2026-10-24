@@ -28,6 +28,8 @@ import androidx.compose.material.icons.rounded.FlashlightOff
 import androidx.compose.material.icons.rounded.FlashlightOn
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.LinkOff
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.LocationOff
 import androidx.compose.material.icons.rounded.LocationOn
@@ -37,7 +39,10 @@ import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Vibration
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material.icons.rounded.WifiTethering
+import androidx.compose.material.icons.rounded.WifiTetheringOff
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -78,6 +83,7 @@ val WifiBlue = Color(0xFF0A84FF)
 val ClipTeal = Color(0xFF64D2FF)
 val MonsterRed = Color(0xFFFF3B30)
 val BedtimeTeal = Color(0xFF64D2FF)
+val EyeAmber = Color(0xFFFFB74D)
 private val TorchWarm = Color(0xFFFFE9A8)
 
 @Composable
@@ -560,6 +566,11 @@ internal fun systemIcon(event: SystemEvent): ImageVector = when (event) {
     SystemEvent.DATA_ON, SystemEvent.DATA_OFF -> Icons.Rounded.SwapVert
     SystemEvent.UNLOCKED -> Icons.Rounded.LockOpen
     SystemEvent.AUTH_FAILED -> Icons.Rounded.Fingerprint
+    SystemEvent.HOTSPOT_ON -> Icons.Rounded.WifiTethering
+    SystemEvent.HOTSPOT_OFF -> Icons.Rounded.WifiTetheringOff
+    SystemEvent.EYE_ON, SystemEvent.EYE_OFF -> Icons.Rounded.Visibility
+    SystemEvent.LINK_ON -> Icons.Rounded.Link
+    SystemEvent.LINK_OFF -> Icons.Rounded.LinkOff
 }
 
 internal fun systemColor(event: SystemEvent, accent: Color): Color = when (event) {
@@ -577,6 +588,9 @@ internal fun systemColor(event: SystemEvent, accent: Color): Color = when (event
     SystemEvent.BEDTIME_ON -> BedtimeTeal
     SystemEvent.DATA_ON, SystemEvent.UNLOCKED -> CallGreen
     SystemEvent.AUTH_FAILED -> DeclineRed
+    SystemEvent.HOTSPOT_ON, SystemEvent.LINK_ON -> WifiBlue
+    SystemEvent.EYE_ON -> EyeAmber
+    SystemEvent.HOTSPOT_OFF, SystemEvent.EYE_OFF, SystemEvent.LINK_OFF -> Secondary
     SystemEvent.LOCATION_OFF, SystemEvent.DND_OFF, SystemEvent.BEDTIME_OFF, SystemEvent.DATA_OFF -> Secondary
     SystemEvent.UNPLUGGED, SystemEvent.HEADPHONES_DISCONNECTED, SystemEvent.AIRPLANE_OFF,
     SystemEvent.FLASHLIGHT_OFF, SystemEvent.MONSTER_OFF, SystemEvent.WIFI_DISCONNECTED -> Secondary
@@ -606,4 +620,7 @@ internal fun systemTitle(event: SystemEvent): String = when (event) {
     SystemEvent.DATA_ON, SystemEvent.DATA_OFF -> "Mobile data"
     SystemEvent.UNLOCKED -> "Unlocked"
     SystemEvent.AUTH_FAILED -> "No match"
+    SystemEvent.HOTSPOT_ON, SystemEvent.HOTSPOT_OFF -> "Hotspot"
+    SystemEvent.EYE_ON, SystemEvent.EYE_OFF -> "Eye protection"
+    SystemEvent.LINK_ON, SystemEvent.LINK_OFF -> "Link to Windows"
 }

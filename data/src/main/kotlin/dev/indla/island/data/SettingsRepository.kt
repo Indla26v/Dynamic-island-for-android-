@@ -123,6 +123,9 @@ class SettingsRepository @Inject constructor(
                 bedtime = this[Keys.live("bedtime")] ?: d.live.bedtime,
                 mobileData = this[Keys.live("mobile_data")] ?: d.live.mobileData,
                 unlock = this[Keys.live("unlock")] ?: d.live.unlock,
+                hotspot = this[Keys.live("hotspot")] ?: d.live.hotspot,
+                eyeProtection = this[Keys.live("eye_protection")] ?: d.live.eyeProtection,
+                linkToWindows = this[Keys.live("link_to_windows")] ?: d.live.linkToWindows,
             ),
             onboardingDone = this[Keys.onboardingDone] ?: d.onboardingDone,
             accessibilityDisclosureAccepted = this[Keys.disclosure] ?: d.accessibilityDisclosureAccepted,
@@ -160,6 +163,9 @@ class SettingsRepository @Inject constructor(
         this[Keys.live("bedtime")] = s.live.bedtime
         this[Keys.live("mobile_data")] = s.live.mobileData
         this[Keys.live("unlock")] = s.live.unlock
+        this[Keys.live("hotspot")] = s.live.hotspot
+        this[Keys.live("eye_protection")] = s.live.eyeProtection
+        this[Keys.live("link_to_windows")] = s.live.linkToWindows
         this[Keys.hideForeground] = s.whenToShow.hideInForegroundApp
         this[Keys.hideFullscreen] = s.whenToShow.hideInFullscreen
         this[Keys.hideLandscape] = s.whenToShow.hideInLandscape

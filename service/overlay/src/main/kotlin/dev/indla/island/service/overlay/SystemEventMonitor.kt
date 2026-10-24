@@ -5,12 +5,13 @@ import dev.indla.island.model.LiveContent
 import dev.indla.island.service.overlay.signals.AirplaneSignal
 import dev.indla.island.service.overlay.signals.DndSignal
 import dev.indla.island.service.overlay.signals.HeadphoneSignal
+import dev.indla.island.service.overlay.signals.HotspotBroadcastSignal
 import dev.indla.island.service.overlay.signals.LocationSignal
 import dev.indla.island.service.overlay.signals.MobileDataSignal
-import dev.indla.island.service.overlay.signals.MonsterSignal
 import dev.indla.island.service.overlay.signals.PowerSignal
 import dev.indla.island.service.overlay.signals.RingerSignal
 import dev.indla.island.service.overlay.signals.SignalSource
+import dev.indla.island.service.overlay.signals.ToggleSettingSignal
 import dev.indla.island.service.overlay.signals.TorchSignal
 import dev.indla.island.service.overlay.signals.WifiSignal
 
@@ -33,7 +34,10 @@ internal class SystemEventMonitor(
         LocationSignal(context, emit),
         DndSignal(context, emit),
         TorchSignal(context, emit),
-        MonsterSignal(context, emit),
+        ToggleSettingSignal.monster(context, emit),
+        ToggleSettingSignal.eyeProtection(context, emit),
+        HotspotBroadcastSignal(context, emit),
+        ToggleSettingSignal.hotspot(context, emit),
     )
 
     fun start() = sources.forEach { runCatching { it.start() } }

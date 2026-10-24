@@ -51,6 +51,9 @@ data class LiveSettings(
     val bedtime: Boolean = true,
     val mobileData: Boolean = true,
     val unlock: Boolean = true,
+    val hotspot: Boolean = true,
+    val eyeProtection: Boolean = true,
+    val linkToWindows: Boolean = true,
 ) {
     fun allows(event: SystemEvent): Boolean = when (event) {
         SystemEvent.CHARGING, SystemEvent.UNPLUGGED -> charging
@@ -69,6 +72,9 @@ data class LiveSettings(
         SystemEvent.BEDTIME_ON, SystemEvent.BEDTIME_OFF -> bedtime
         SystemEvent.DATA_ON, SystemEvent.DATA_OFF -> mobileData
         SystemEvent.UNLOCKED, SystemEvent.AUTH_FAILED -> unlock
+        SystemEvent.HOTSPOT_ON, SystemEvent.HOTSPOT_OFF -> hotspot
+        SystemEvent.EYE_ON, SystemEvent.EYE_OFF -> eyeProtection
+        SystemEvent.LINK_ON, SystemEvent.LINK_OFF -> linkToWindows
     }
 }
 

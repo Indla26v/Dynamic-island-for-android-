@@ -117,7 +117,8 @@ data class IslandLayout(
      */
     fun isSlimGlance(state: IslandUiState): Boolean {
         val item = state.current ?: return false
-        return item.kind == ItemKind.SYSTEM && item.actions.isEmpty() && !state.quickActionsOpen
+        // Buttons (the torch's off switch) sit inline at the bar's end, so every glance is slim.
+        return item.kind == ItemKind.SYSTEM && !state.quickActionsOpen
     }
 
     fun expandedHeight(state: IslandUiState): Float {
