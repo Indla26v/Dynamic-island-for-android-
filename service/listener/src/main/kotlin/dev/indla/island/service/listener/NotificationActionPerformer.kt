@@ -34,6 +34,7 @@ class NotificationActionPerformer @Inject constructor(
     private val rules: AppRuleRepository,
     @ApplicationScope private val scope: CoroutineScope,
     private val media: MediaWatcher,
+    private val customViews: CustomViewReader,
 ) : IslandEffects {
     private var listener = WeakReference<NotificationListenerService>(null)
     private val posted = object : LinkedHashMap<String, StatusBarNotification>(32, 0.75f, true) {
@@ -72,6 +73,11 @@ class NotificationActionPerformer @Inject constructor(
 
     override fun invokeAction(key: String, actionIndex: Int) {
         val sbn = posted[key] ?: return
+        if (actionIndex == ActionRole.CUSTOM_TOGGLE_INDEX || actionIndex == ActionRole.CUSTOM_STOP_INDEX) {
+            val control = if (actionIndex == ActionRole.CUSTOM_TOGGLE_INDEX) CustomViewReader.Control.TOGGLE else CustomViewReader.Control.STOP
+            if (!customViews.press(sbn.notification, control)) Log.w(TAG, "no $control button in ${sbn.packageName}'s view")
+            return
+        }
         if (actionIndex < 0) {
             val extras = sbn.notification.extras
             val intent = when (actionIndex) {

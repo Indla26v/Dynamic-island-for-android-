@@ -103,6 +103,8 @@ class NotificationExtractor @Inject constructor(
             },
             chronometerCountDown = extras.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN, false) ||
                 metric?.countDown == true || custom?.countDown == true,
+            customToggle = custom?.hasToggle == true,
+            customStop = custom?.hasStop == true,
             largeIconKey = n.getLargeIcon()?.let { cacheIcon("$pkg|large|${sbn.key}", it, versioned = true) }
                 ?: callPerson?.icon?.let { cacheIcon("$pkg|caller|${sbn.key}", it) }
                 ?: if (n.category == Notification.CATEGORY_CALL) contacts.photoKey(caller, phoneOf(callPerson)) else null,

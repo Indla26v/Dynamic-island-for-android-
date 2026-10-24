@@ -43,6 +43,9 @@ data class RawNotification(
     val chronometerBase: Long? = null,
     /** EXTRA_CHRONOMETER_COUNT_DOWN: the chronometer counts down to [chronometerBase]. */
     val chronometerCountDown: Boolean = false,
+    /** The custom view has its own play/pause and stop buttons (vivo Recorder). */
+    val customToggle: Boolean = false,
+    val customStop: Boolean = false,
     /** Key into the icon store for `largeIcon`, if the listener cached one. */
     val largeIconKey: String? = null,
     /** A vivid colour picked from the app icon, for "Colour from app icon". */

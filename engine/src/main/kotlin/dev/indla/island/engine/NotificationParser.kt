@@ -101,20 +101,31 @@ class NotificationParser(
                 (raw.packageName in CLOCK_PACKAGES && raw.category != "stopwatch" && !label.contains("stopwatch", ignoreCase = true))
             )
         val base = baseItem(raw)
+        val actions = base.actions.map { a ->
+            val role = when {
+                PAUSE.containsMatchIn(a.title) -> ActionRole.PAUSE
+                RESUME.containsMatchIn(a.title) -> ActionRole.RESUME
+                STOP.containsMatchIn(a.title) -> ActionRole.STOP
+                else -> ActionRole.NORMAL
+            }
+            a.copy(role = role)
+        }
+        // Buttons drawn inside the app's own view (no notification actions): pressed there.
+        val custom = buildList {
+            if (raw.customToggle && actions.none { it.role == ActionRole.PAUSE || it.role == ActionRole.RESUME }) {
+                val running = raw.chronometerBase != null
+                add(IslandAction(ActionRole.CUSTOM_TOGGLE_INDEX, if (running) "Pause" else "Resume", false, if (running) ActionRole.PAUSE else ActionRole.RESUME))
+            }
+            if (raw.customStop && actions.none { it.role == ActionRole.STOP }) {
+                add(IslandAction(ActionRole.CUSTOM_STOP_INDEX, "Stop", false, ActionRole.STOP))
+            }
+        }
         return base.copy(
             kind = ItemKind.TIMER,
             title = label,
             glance = time,
             lines = emptyList(),
-            actions = base.actions.map { a ->
-                val role = when {
-                    PAUSE.containsMatchIn(a.title) -> ActionRole.PAUSE
-                    RESUME.containsMatchIn(a.title) -> ActionRole.RESUME
-                    STOP.containsMatchIn(a.title) -> ActionRole.STOP
-                    else -> ActionRole.NORMAL
-                }
-                a.copy(role = role)
-            },
+            actions = actions + custom,
             live = LiveContent.Timer(label, raw.chronometerBase, countDown, time, recording),
         )
     }

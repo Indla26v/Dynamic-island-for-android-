@@ -21,7 +21,17 @@ import javax.inject.Singleton
 class CustomViewReader @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    class Timer(val label: String?, val baseWallMs: Long?, val countDown: Boolean, val shownTime: String?)
+    class Timer(
+        val label: String?,
+        val baseWallMs: Long?,
+        val countDown: Boolean,
+        val shownTime: String?,
+        /** The view has its own play/pause and stop buttons the island can press. */
+        val hasToggle: Boolean = false,
+        val hasStop: Boolean = false,
+    )
+
+    enum class Control { TOGGLE, STOP }
 
     /** Only for ongoing notifications whose content lives entirely in a custom view. */
     fun timer(n: Notification): Timer? {
@@ -42,8 +52,34 @@ class CustomViewReader @Inject constructor(
             baseWallMs = if (paused) null else System.currentTimeMillis() + (base - SystemClock.elapsedRealtime()),
             countDown = chronometer.isCountDown,
             shownTime = chronometer.text?.toString(),
+            hasToggle = control(root, Control.TOGGLE) != null,
+            hasStop = control(root, Control.STOP) != null,
         )
     }
+
+    /**
+     * Presses a button inside the app's own notification view. The view is inflated here from
+     * the posted RemoteViews, so its click sends the app's own PendingIntent, exactly as a tap
+     * on it in the shade would; the app never has to open.
+     */
+    fun press(n: Notification, control: Control): Boolean {
+        @Suppress("DEPRECATION")
+        val views = n.contentView ?: n.bigContentView ?: return false
+        val root = runCatching { views.apply(context, FrameLayout(context)) }.getOrNull() ?: return false
+        val button = control(root, control) ?: return false
+        return runCatching { button.performClick() }.getOrDefault(false)
+    }
+
+    /** A clickable view whose label says what it does ("Pause", "Recording", "Done"). */
+    private fun control(root: View, control: Control): View? {
+        val words = if (control == Control.TOGGLE) TOGGLE_LABEL else STOP_LABEL
+        return find(root) { v ->
+            v.visibility == View.VISIBLE && v.hasOnClickListeners() && words.matches(label(v))
+        }
+    }
+
+    private fun label(v: View): String =
+        (v.contentDescription ?: (v as? TextView)?.text)?.toString()?.trim().orEmpty()
 
     private fun find(view: View, predicate: (View) -> Boolean): View? {
         if (predicate(view)) return view
@@ -75,5 +111,8 @@ class CustomViewReader @Inject constructor(
         val TIME = Regex("""-?\d{1,2}(:\d{2}){1,2}""")
         val PAUSED_ACTION = Regex("""(?i)\b(resume|start|continue)\b""")
         val PAUSED_LABEL = Regex("""(?i)\b(paused|resume|continue)\b""")
+        // Whole labels only: "Recording" is the resume button in vivo Recorder's view.
+        val TOGGLE_LABEL = Regex("""(?i)(pause|resume|continue|play|start|record|recording|continue recording|pause recording)""")
+        val STOP_LABEL = Regex("""(?i)(stop|done|end|save|finish|stop recording)""")
     }
 }

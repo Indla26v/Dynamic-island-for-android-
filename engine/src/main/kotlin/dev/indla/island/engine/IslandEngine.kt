@@ -505,7 +505,7 @@ class IslandEngine(
         if (index >= 0) {
             val entry = active[index]
             val changed = liveHash(entry.item) != hash
-            entry.item = item
+            entry.item = holdPausedTime(entry.item, item)
             entry.expiresAt = when {
                 persistent -> FOREVER
                 entry.persistent -> now + LIVE_LINGER_MS // just paused: linger, then go
@@ -527,6 +527,32 @@ class IslandEngine(
         if (pop && isVisible()) insert(entry, autoExpand = false) else active.add(entry)
         reconcileParking()
         publish()
+    }
+
+    /**
+     * Pausing stops an app's chronometer, and some views then read 0:00. The island holds the
+     * time it was showing at the moment of the pause instead.
+     */
+    private fun holdPausedTime(old: IslandItem, new: IslandItem): IslandItem {
+        val was = old.live as? LiveContent.Timer ?: return new
+        val now = new.live as? LiveContent.Timer ?: return new
+        if (now.baseMs != null) return new
+        val base = was.baseMs
+        val held = when {
+            base != null -> clockText(if (was.countDown) base - clock() else clock() - base)
+            ZERO_TIME.matches(now.staticTime) && !ZERO_TIME.matches(was.staticTime) -> was.staticTime
+            else -> return new
+        }
+        return new.copy(glance = held, live = now.copy(staticTime = held))
+    }
+
+    private fun clockText(ms: Long): String {
+        val total = (kotlin.math.abs(ms) / 1000)
+        val h = total / 3600
+        val m = (total % 3600) / 60
+        val s = total % 60
+        val text = if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+        return if (ms < 0) "-$text" else text
     }
 
     private fun isPersistent(item: IslandItem) = when (val live = item.live) {
@@ -874,6 +900,7 @@ class IslandEngine(
         private const val MAX_SEEN = 256
         private const val MAX_PENDING = 20
         private const val FOREVER = Long.MAX_VALUE
+        private val ZERO_TIME = Regex("^[0:]*$")
         private val REDACTABLE = setOf(ItemKind.MESSAGE, ItemKind.GENERIC, ItemKind.PROGRESS)
 
         fun mediaKey(packageName: String) = "media:$packageName"

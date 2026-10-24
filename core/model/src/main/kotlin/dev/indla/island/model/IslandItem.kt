@@ -96,6 +96,9 @@ enum class ActionRole {
         const val ANSWER_INDEX = -1
         const val DECLINE_INDEX = -2
         const val HANG_UP_INDEX = -3
+        /** Play/pause and stop buttons drawn inside an app's custom notification view. */
+        const val CUSTOM_TOGGLE_INDEX = -4
+        const val CUSTOM_STOP_INDEX = -5
     }
 }
 
