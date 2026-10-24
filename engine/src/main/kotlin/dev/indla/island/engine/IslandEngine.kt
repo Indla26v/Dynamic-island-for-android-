@@ -1,5 +1,6 @@
 package dev.indla.island.engine
 
+import dev.indla.island.model.ActionRole
 import dev.indla.island.model.AppRule
 import dev.indla.island.model.DefaultApps
 import dev.indla.island.model.Environment
@@ -344,6 +345,10 @@ class IslandEngine(
             replyOpen = true
             quickActionsOpen = false
             publish()
+        } else if (action.role == ActionRole.PAUSE || action.role == ActionRole.RESUME) {
+            // Play/pause keeps the card open, so the change can be seen.
+            effects.invokeAction(item.key, action.index)
+            publish()
         } else if (item.isLive) {
             // Answer/hang up and friends: the activity updates itself when the app reacts.
             effects.invokeAction(item.key, action.index)
@@ -353,6 +358,13 @@ class IslandEngine(
             effects.invokeAction(item.key, action.index)
             removeCurrent()
         }
+    }
+
+    /** Opens the shown item's app, whatever the tap gesture is mapped to. */
+    fun onOpenCurrent() {
+        if (active.isEmpty()) return
+        touch()
+        perform(GestureAction.OPEN_APP, IslandGesture.TAP)
     }
 
     fun onMediaCommand(command: MediaCommand) {

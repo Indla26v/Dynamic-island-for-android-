@@ -488,6 +488,15 @@ class IslandEngineTest {
     }
 
     @Test
+    fun timerPause_keepsTheCardOpen() = test { h ->
+        h.engine.onPosted(Fixtures.clockTimer())
+        h.engine.onGesture(IslandGesture.TAP)
+        h.engine.onActionTapped(0) // Pause
+        assertEquals(listOf("action:${Fixtures.clockTimer().key}:0"), h.effects.calls)
+        assertEquals("pause shows its effect in place", IslandMode.EXPANDED, h.state.mode)
+    }
+
+    @Test
     fun systemEvent_isBrief_andRespectsSettings() = test { h ->
         h.engine.onSystemEvent(LiveContent.System(SystemEvent.CHARGING, 54, "54%"))
         assertEquals(ItemKind.SYSTEM, h.state.current?.kind)

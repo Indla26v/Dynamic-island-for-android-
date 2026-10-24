@@ -407,6 +407,7 @@ class IslandAccessibilityService : AccessibilityService() {
                 id == HitRegistry.MEDIA_SEEK -> seek(point)
                 id == HitRegistry.QUICK_MUTE -> engine.onMuteApp()
                 id == HitRegistry.QUICK_DISMISS -> engine.onDismissCurrent()
+                id.startsWith(HitRegistry.OPEN_APP) -> engine.onOpenCurrent()
                 else -> engine.onGesture(dev.indla.island.model.IslandGesture.TAP)
             }
         },

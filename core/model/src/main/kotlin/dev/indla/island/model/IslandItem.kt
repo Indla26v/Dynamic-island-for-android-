@@ -85,7 +85,11 @@ enum class ActionRole {
     REPLY,
     ANSWER,
     DECLINE,
-    HANG_UP;
+    HANG_UP,
+    /** Timer, stopwatch and recorder controls: one play/pause toggle and a stop button. */
+    PAUSE,
+    RESUME,
+    STOP;
 
     companion object {
         /** Synthetic action indices for CallStyle intents that live in extras, not in `actions`. */
@@ -131,8 +135,12 @@ sealed interface LiveContent {
     data class Progress(
         /** 0..1, or null while indeterminate. */
         val fraction: Float?,
-        /** "Arriving in 12 min", "45%", "Downloading". */
+        /** "Arriving in 12 min", "45%", "Downloading"; the road, for navigation. */
         val status: String,
+        /** Turn-by-turn directions: the title is the distance, the large icon the turn. */
+        val navigation: Boolean = false,
+        /** "9 min · 3.8 km · 16:41 ETA". */
+        val eta: String? = null,
     ) : LiveContent {
         override val stableKey get() = status.isNotEmpty()
     }

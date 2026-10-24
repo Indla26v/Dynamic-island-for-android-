@@ -47,6 +47,7 @@ class NotificationParser(
             isCall(raw) -> callItem(raw)
             isTimer(raw) -> timerItem(raw)
             raw.category in SYSTEM_CATEGORIES -> return ParseResult.Skip(SkipReason.SYSTEM_CATEGORY)
+            isNavigation(raw) -> navigationItem(raw)
             isProgress(raw) -> progressItem(raw)
             raw.ongoing -> return ParseResult.Skip(SkipReason.ONGOING)
             isRedacted(raw) -> hiddenItem(raw)
@@ -99,11 +100,21 @@ class NotificationParser(
                 (raw.chronometerBase?.let { it > raw.postTime + 1_000 } == true) ||
                 (raw.packageName in CLOCK_PACKAGES && raw.category != "stopwatch" && !label.contains("stopwatch", ignoreCase = true))
             )
-        return baseItem(raw).copy(
+        val base = baseItem(raw)
+        return base.copy(
             kind = ItemKind.TIMER,
             title = label,
             glance = time,
             lines = emptyList(),
+            actions = base.actions.map { a ->
+                val role = when {
+                    PAUSE.containsMatchIn(a.title) -> ActionRole.PAUSE
+                    RESUME.containsMatchIn(a.title) -> ActionRole.RESUME
+                    STOP.containsMatchIn(a.title) -> ActionRole.STOP
+                    else -> ActionRole.NORMAL
+                }
+                a.copy(role = role)
+            },
             live = LiveContent.Timer(label, raw.chronometerBase, countDown, time, recording),
         )
     }
@@ -157,6 +168,23 @@ class NotificationParser(
             actions = callActions,
             avatarKey = raw.largeIconKey,
             live = LiveContent.Call(caller, state, raw.chronometerBase ?: raw.postTime),
+        )
+    }
+
+    /** Google Maps, Waze and other turn-by-turn apps while navigating. */
+    fun isNavigation(raw: RawNotification): Boolean =
+        raw.ongoing && (raw.category == "navigation" || raw.packageName in NAVIGATION_PACKAGES)
+
+    private fun navigationItem(raw: RawNotification): IslandItem {
+        val distance = raw.title?.trim()?.takeIf { it.isNotEmpty() } ?: raw.appLabel
+        val road = raw.text?.trim().orEmpty()
+        return baseItem(raw).copy(
+            kind = ItemKind.PROGRESS,
+            title = distance,
+            glance = distance,
+            lines = listOfNotNull(road.takeIf { it.isNotEmpty() }?.let { MessageLine(null, it) }),
+            avatarKey = raw.largeIconKey,
+            live = LiveContent.Progress(null, road, navigation = true, eta = raw.subText?.trim()?.takeIf { it.isNotEmpty() }),
         )
     }
 
@@ -365,6 +393,9 @@ class NotificationParser(
         /** System plumbing that never belongs on the island. */
         val SYSTEM_CATEGORIES = setOf("service", "sys", "alarm", "stopwatch")
 
+        val PAUSE = Regex("(?i)^\\s*pause")
+        val RESUME = Regex("(?i)^\\s*(resume|continue|start|play)")
+        val STOP = Regex("(?i)^\\s*(stop|save|done|finish|end|dismiss|cancel)")
         val RECORDER_PACKAGE = Regex("(?i)recorder|voicenote|voicememo")
         val RECORDING = Regex("(?i)\\brecord(ing|er)\\b")
 
@@ -385,6 +416,15 @@ class NotificationParser(
         private val TIME = Regex("""-?\d{1,2}(:\d{2}){1,2}""")
 
         /** Ongoing notifications in these categories are deliveries, rides, navigation. */
+        val NAVIGATION_PACKAGES = setOf(
+            "com.google.android.apps.maps",
+            "com.google.android.apps.mapslite",
+            "com.waze",
+            "com.here.app.maps",
+            "com.sygic.aura",
+            "net.osmand",
+            "com.mapmyindia.app",
+        )
         val PROGRESS_CATEGORIES = setOf("progress", "navigation", "status", "location_sharing")
 
         const val CALL_TYPE_INCOMING = 1

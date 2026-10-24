@@ -235,6 +235,20 @@ object Fixtures {
         actions = listOf(RawAction(0, "Pause"), RawAction(1, "Add 1 minute")),
     )
 
+    /** Google Maps navigating, as read off a phone: distance, road, ETA, an arrow, Exit. */
+    fun mapsNavigation() = RawNotification(
+        key = "0|com.google.android.apps.maps|1|null|10207",
+        packageName = "com.google.android.apps.maps",
+        appLabel = "Maps",
+        postTime = 30_000,
+        ongoing = true,
+        title = "110 m",
+        text = "100 Ft Rd / Seethamma Rd",
+        subText = "9 min · 3.8 km · 16:41 ETA",
+        largeIconKey = "com.google.android.apps.maps|large|1#42",
+        actions = listOf(RawAction(0, "Exit navigation")),
+    )
+
     /** vivo Recorder while recording: a counting-up chronometer in a custom view. */
     fun vivoRecorder() = RawNotification(
         key = "0|com.android.bbksoundrecorder|1|null|10077",

@@ -98,7 +98,7 @@ data class IslandLayout(
         val body = when {
             state.quickActionsOpen -> AVATAR + GAP + BUTTON_ROW
             item.kind == ItemKind.CALL -> CALL_ROW
-            item.kind == ItemKind.TIMER -> CALL_ROW + actionsHeight(item)
+            item.kind == ItemKind.TIMER -> CALL_ROW + GAP + CONTROL_ROW
             item.kind == ItemKind.MEDIA -> MEDIA_ART + GAP + SCRUBBER + MEDIA_CONTROLS
             item.kind == ItemKind.SYSTEM -> SYSTEM_ROW
             item.kind == ItemKind.PROGRESS -> PROGRESS_BODY + actionsHeight(item)
@@ -138,6 +138,8 @@ data class IslandLayout(
         const val MEDIA_ART = 56f
         const val SCRUBBER = 24f
         const val MEDIA_CONTROLS = 48f
+        /** Round play/pause and stop buttons under a timer or recording. */
+        const val CONTROL_ROW = 52f
         const val PROGRESS_BODY = 64f
         const val SYSTEM_ROW = 52f
 

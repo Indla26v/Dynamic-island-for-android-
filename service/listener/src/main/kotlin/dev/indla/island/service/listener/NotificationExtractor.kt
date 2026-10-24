@@ -103,7 +103,7 @@ class NotificationExtractor @Inject constructor(
             },
             chronometerCountDown = extras.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN, false) ||
                 metric?.countDown == true || custom?.countDown == true,
-            largeIconKey = n.getLargeIcon()?.let { cacheIcon("$pkg|large|${sbn.key}", it) }
+            largeIconKey = n.getLargeIcon()?.let { cacheIcon("$pkg|large|${sbn.key}", it, versioned = true) }
                 ?: callPerson?.icon?.let { cacheIcon("$pkg|caller|${sbn.key}", it) }
                 ?: if (n.category == Notification.CATEGORY_CALL) contacts.photoKey(caller, phoneOf(callPerson)) else null,
             appAccentArgb = apps.accent(pkg),
@@ -184,14 +184,29 @@ class NotificationExtractor @Inject constructor(
     private fun cacheIcon(key: String, icon: IconCompat): String? =
         runCatching { icon.loadDrawable(context) }.getOrNull()?.let { store(key, it) }
 
-    private fun cacheIcon(key: String, icon: Icon): String? =
-        runCatching { icon.loadDrawable(context) }.getOrNull()?.let { store(key, it) }
+    private fun cacheIcon(key: String, icon: Icon, versioned: Boolean = false): String? =
+        runCatching { icon.loadDrawable(context) }.getOrNull()?.let { store(key, it, versioned) }
 
-    private fun store(key: String, drawable: Drawable): String? {
+    /**
+     * @param versioned the image can change under the same notification (Maps' turn arrow, a
+     *   new album cover): key it by content too, so the island never keeps drawing the old one.
+     */
+    private fun store(key: String, drawable: Drawable, versioned: Boolean = false): String? {
         val bitmap = runCatching { drawable.toBitmap() }.getOrNull() ?: return null
         val scaled = if (bitmap.width > ICON_PX || bitmap.height > ICON_PX) bitmap.scale(ICON_PX, ICON_PX) else bitmap
-        icons.put(key, scaled.copy(Bitmap.Config.ARGB_8888, false) ?: scaled)
-        return key
+        val stored = scaled.copy(Bitmap.Config.ARGB_8888, false) ?: scaled
+        val finalKey = if (versioned) "$key#${fingerprint(stored)}" else key
+        icons.put(finalKey, stored)
+        return finalKey
+    }
+
+    /** A cheap content hash: a 16x16 grid of pixels is enough to tell two turn arrows apart. */
+    private fun fingerprint(bitmap: Bitmap): Int {
+        var hash = 17
+        for (y in 0 until 16) for (x in 0 until 16) {
+            hash = hash * 31 + bitmap.getPixel(x * (bitmap.width - 1) / 15, y * (bitmap.height - 1) / 15)
+        }
+        return hash
     }
 
     private companion object {

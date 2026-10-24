@@ -176,6 +176,19 @@ class NotificationParserTest {
         assertEquals("14:04", timer.staticTime)
         assertTrue(timer.countDown)
         assertEquals(listOf("Pause", "Add 1 minute"), item.actions.map { it.title })
+        assertEquals(listOf(ActionRole.PAUSE, ActionRole.NORMAL), item.actions.map { it.role })
+    }
+
+    @Test
+    fun maps_isNavigation_notAnEmptyProgressBar() {
+        val item = show(Fixtures.mapsNavigation())
+        val nav = item.live as LiveContent.Progress
+        assertTrue(nav.navigation)
+        assertEquals("110 m", item.title)
+        assertEquals("110 m", item.glance)
+        assertEquals("100 Ft Rd / Seethamma Rd", nav.status)
+        assertEquals("9 min · 3.8 km · 16:41 ETA", nav.eta)
+        assertEquals(listOf("Exit navigation"), item.actions.map { it.title })
     }
 
     @Test

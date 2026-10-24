@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,10 +49,12 @@ import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Navigation
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material3.Icon
@@ -153,7 +156,7 @@ private fun RowScope.CompactLeading(item: IslandItem, size: Dp, accent: Color) {
         } else {
             SystemIcon(live.event, systemColor(live.event, accent), size * 0.85f)
         }
-        is LiveContent.Progress -> ItemIcon(item, size)
+        is LiveContent.Progress -> if (live.navigation) TurnArrow(item, size) else ItemIcon(item, size)
         is LiveContent.Timer -> if (live.recording) {
             RecordDot(live.baseMs != null, size * 0.7f)
             Spacer(Modifier.width(4.dp))
@@ -207,7 +210,10 @@ private fun RowScope.CompactTrailing(item: IslandItem, accent: Color, minimal: B
                 GlanceText(item.glance, CallGreen)
             }
         }
-        is LiveContent.Progress -> {
+        is LiveContent.Progress -> if (live.navigation) {
+            // The distance to the next turn, large and white: readable at a glance while driving.
+            Text(item.glance, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, style = Tabular)
+        } else {
             if (item.glance.isNotEmpty() && !minimal) {
                 GlanceText(item.glance, accent)
                 Spacer(Modifier.width(6.dp))
@@ -262,9 +268,13 @@ internal fun BubbleContent(item: IslandItem, size: Dp, accent: Color) {
         is LiveContent.Call -> Box(Modifier.size(inner).clip(CircleShape).background(CallGreen), contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.Call, null, tint = Color.White, modifier = Modifier.size(inner * 0.6f))
         }
-        is LiveContent.Progress -> Box(contentAlignment = Alignment.Center) {
-            ProgressRing(live.fraction, itemAccent, Modifier.size(inner), stroke = 3.dp)
-            ItemIcon(item, inner * 0.55f)
+        is LiveContent.Progress -> if (live.navigation) {
+            TurnArrow(item, inner)
+        } else {
+            Box(contentAlignment = Alignment.Center) {
+                ProgressRing(live.fraction, itemAccent, Modifier.size(inner), stroke = 3.dp)
+                ItemIcon(item, inner * 0.55f)
+            }
         }
         is LiveContent.Timer -> Icon(Icons.Rounded.Timer, null, tint = TimerOrange, modifier = Modifier.size(inner * 0.7f))
         is LiveContent.System -> Box(contentAlignment = Alignment.Center) {
@@ -355,8 +365,12 @@ private fun Band(item: IslandItem, layout: IslandLayout, rect: IslandRect, pad: 
                     val now by rememberNow()
                     Text(formatDuration(now - live.startedAtMs), color = CallGreen, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, style = Tabular)
                 }
-                is LiveContent.Progress -> live.fraction?.let {
-                    Text("${(it * 100).toInt()}%", color = accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, style = Tabular)
+                is LiveContent.Progress -> if (live.navigation) {
+                    live.eta?.let { Text(it, color = Secondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                } else {
+                    live.fraction?.let {
+                        Text("${(it * 100).toInt()}%", color = accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, style = Tabular)
+                    }
                 }
                 is LiveContent.System -> Unit
                 is LiveContent.Timer -> Unit
@@ -648,6 +662,10 @@ private fun MediaButton(icon: ImageVector, label: String, enabled: Boolean, size
 /** Delivery, ride or download: title, status, a bar in the app's colour. */
 @Composable
 private fun ProgressBody(item: IslandItem, progress: LiveContent.Progress, accent: Color, registry: HitRegistry?) {
+    if (progress.navigation) {
+        NavigationBody(item, progress, registry)
+        return
+    }
     Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically) {
         AvatarWithBadge(item, 36.dp)
         Spacer(Modifier.width(12.dp))
@@ -679,6 +697,51 @@ private fun ProgressBody(item: IslandItem, progress: LiveContent.Progress, accen
                 PillButton(action.title, null, registry, HitRegistry.action(action.index), Modifier.weight(1f))
             }
         }
+    }
+}
+
+/** Turn-by-turn: the turn arrow, the distance large, the road under it, and Exit in red. */
+@Composable
+private fun NavigationBody(item: IslandItem, nav: LiveContent.Progress, registry: HitRegistry?) {
+    Row(Modifier.fillMaxWidth().height(IslandLayout.PROGRESS_BODY.dp), verticalAlignment = Alignment.CenterVertically) {
+        TurnArrow(item, 52.dp)
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(item.title, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, maxLines = 1, style = Tabular)
+            if (nav.status.isNotEmpty()) {
+                Text(nav.status, color = Secondary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+    if (item.actions.isNotEmpty()) {
+        Spacer(Modifier.height(IslandLayout.GAP.dp))
+        ButtonRow {
+            item.actions.forEach { action ->
+                val exit = EXIT_NAVIGATION.containsMatchIn(action.title)
+                PillButton(
+                    action.title,
+                    if (exit) Icons.Rounded.Close else null,
+                    registry,
+                    HitRegistry.action(action.index),
+                    Modifier.weight(1f),
+                    fill = if (exit) DeclineRed else ButtonFill,
+                )
+            }
+        }
+    }
+}
+
+private val EXIT_NAVIGATION = Regex("(?i)exit|end|stop")
+
+/** The app's own turn arrow (its large icon), or a generic one when it sends none. */
+@Composable
+private fun TurnArrow(item: IslandItem, size: Dp) {
+    val store = LocalIconStore.current
+    val bitmap = remember(item.avatarKey, store) { store?.get(item.avatarKey)?.asImageBitmap() }
+    if (bitmap != null) {
+        Image(bitmap, null, Modifier.size(size), contentScale = ContentScale.Fit)
+    } else {
+        Icon(Icons.Rounded.Navigation, null, tint = Color.White, modifier = Modifier.size(size * 0.8f))
     }
 }
 
@@ -803,7 +866,7 @@ private fun TimerBody(item: IslandItem, timer: LiveContent.Timer, registry: HitR
             Spacer(Modifier.width(14.dp))
             Text(timer.display(now), color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Light, style = Tabular, maxLines = 1)
         }
-        TimerActions(item, registry)
+        TimerActions(item, timer, registry)
         return
     }
     Row(Modifier.fillMaxWidth().height(IslandLayout.CALL_ROW.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -828,17 +891,65 @@ private fun TimerBody(item: IslandItem, timer: LiveContent.Timer, registry: HitR
         Text(timer.label, color = Secondary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         Text(timer.display(now), color = TimerOrange, fontSize = 30.sp, fontWeight = FontWeight.SemiBold, style = Tabular, maxLines = 1)
     }
-    TimerActions(item, registry)
+    TimerActions(item, timer, registry)
 }
 
 @Composable
-private fun TimerActions(item: IslandItem, registry: HitRegistry?) {
-    if (item.actions.isNotEmpty()) {
-        Spacer(Modifier.height(IslandLayout.GAP.dp))
-        ButtonRow {
-            item.actions.forEach { action ->
-                PillButton(action.title, null, registry, HitRegistry.action(action.index), Modifier.weight(1f))
-            }
+private fun TimerActions(item: IslandItem, timer: LiveContent.Timer, registry: HitRegistry?) {
+    Spacer(Modifier.height(IslandLayout.GAP.dp))
+    val pause = item.actions.firstOrNull { it.role == ActionRole.PAUSE }
+    val resume = item.actions.firstOrNull { it.role == ActionRole.RESUME }
+    val stop = item.actions.firstOrNull { it.role == ActionRole.STOP }
+    val extras = item.actions.filter { it.role == ActionRole.NORMAL }.take(1)
+    // Running or not: the app's own Pause/Resume offer says best, the chronometer otherwise.
+    val running = when {
+        pause != null -> true
+        resume != null -> false
+        else -> timer.baseMs != null
+    }
+    val tint = if (timer.recording) RecordRed else TimerOrange
+    Row(
+        Modifier.fillMaxWidth().height(IslandLayout.CONTROL_ROW.dp),
+        horizontalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        extras.forEach { action ->
+            PillButton(action.title, null, registry, HitRegistry.action(action.index), Modifier.widthIn(max = 120.dp))
+        }
+        // One button for both: shows pause while running, play while paused. Apps that offer
+        // no such action (vivo Recorder) get the same buttons, which open the app instead.
+        ControlButton(
+            icon = if (running) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+            label = if (running) "Pause" else "Resume",
+            fill = tint.copy(alpha = 0.22f),
+            tint = tint,
+            registry = registry,
+            id = (pause ?: resume)?.let { HitRegistry.action(it.index) } ?: HitRegistry.OPEN_APP + ":toggle",
+        )
+        ControlButton(
+            icon = Icons.Rounded.Stop,
+            label = "Stop",
+            fill = Color.White.copy(alpha = 0.14f),
+            tint = Color.White,
+            registry = registry,
+            id = stop?.let { HitRegistry.action(it.index) } ?: HitRegistry.OPEN_APP + ":stop",
+        )
+    }
+}
+
+/** A round control: the toggle morphs its icon between pause and play. */
+@Composable
+private fun ControlButton(icon: ImageVector, label: String, fill: Color, tint: Color, registry: HitRegistry?, id: String) {
+    Box(
+        Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(fill)
+            .hitRegion(registry, id),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.animation.Crossfade(icon, animationSpec = tween(180), label = "control") { shown ->
+            Icon(shown, label, tint = tint, modifier = Modifier.size(26.dp))
         }
     }
 }
@@ -921,12 +1032,12 @@ private fun ButtonRow(content: @Composable RowScope.() -> Unit) {
 }
 
 @Composable
-private fun PillButton(label: String, icon: ImageVector?, registry: HitRegistry?, id: String, modifier: Modifier) {
+private fun PillButton(label: String, icon: ImageVector?, registry: HitRegistry?, id: String, modifier: Modifier, fill: Color = ButtonFill) {
     Row(
         modifier
             .height(IslandLayout.BUTTON_ROW.dp)
             .clip(CircleShape)
-            .background(ButtonFill)
+            .background(fill)
             .hitRegion(registry, id)
             .padding(horizontal = 12.dp),
         horizontalArrangement = Arrangement.Center,
