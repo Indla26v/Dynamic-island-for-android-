@@ -102,6 +102,9 @@ class IslandEngine(
     /** Size from the Look screen's slider while it is dragged, before it is saved. */
     private var previewScale: Float? = null
     private var timer: Job? = null
+    /** System events of the last few seconds, to tell causes from their side effects. */
+    private val recentSystem = ArrayDeque<Pair<SystemEvent, Long>>()
+
     /** Set by a page turn for the one state it produces. */
     private var pageTurn = 0
     /** Digital Wellbeing's "Bedtime mode is on" notification, while it's up. */
@@ -328,6 +331,7 @@ class IslandEngine(
 
     /** A phone state change (charging, ringer, modes, headphones, unlock): a brief glance. */
     fun onSystemEvent(event: LiveContent.System) {
+        if (isConsequence(event.event)) return
         // Mode switches mostly happen in quick settings, so these glances show over the shade.
         if (!settings.enabled || !settings.live.allows(event.event) || !isVisible(overShade = true)) return
         val key = SYSTEM_KEY_PREFIX + systemGroup(event.event)
@@ -423,6 +427,25 @@ class IslandEngine(
             effects.invokeAction(item.key, action.index)
             removeCurrent()
         }
+    }
+
+    /**
+     * One switch flipping others (bedtime -> Do Not Disturb, silent, warm screen) shows only the
+     * cause. Returns true when [event] is a side effect of something that just happened; a cause
+     * arriving after its side effects clears them away. Causes count even when their own glance
+     * is switched off.
+     */
+    private fun isConsequence(event: SystemEvent): Boolean {
+        val now = clock()
+        recentSystem.removeAll { now - it.second > GlanceCascade.WINDOW_MS }
+        if (GlanceCascade.explainedBy(event, recentSystem.map { it.first })) return true
+        removeWhere { entry ->
+            val shown = (entry.item.live as? LiveContent.System)?.event
+            shown != null && now - entry.item.postTime <= GlanceCascade.WINDOW_MS &&
+                GlanceCascade.explainedBy(shown, listOf(event))
+        }
+        recentSystem.addLast(event to now)
+        return false
     }
 
     /** Opens the shown item's app, whatever the tap gesture is mapped to. */

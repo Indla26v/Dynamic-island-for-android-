@@ -534,6 +534,30 @@ class IslandEngineTest {
     }
 
     @Test
+    fun bedtime_hidesWhatItSwitches_inEitherOrder() = test { h ->
+        // Side effects first, then the cause: they make way for it.
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.RINGER_SILENT, null, "Sounds off"))
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.DND_ON, null, "Priority only"))
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.BEDTIME_ON, null, "Until 7:00 AM"))
+        assertEquals(listOf(SystemEvent.BEDTIME_ON), h.state.items.map { (it.live as LiveContent.System).event })
+        // Then more side effects: swallowed.
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.EYE_ON, null, "On"))
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.DARK_MODE, null, "On"))
+        assertEquals(listOf(SystemEvent.BEDTIME_ON), h.state.items.map { (it.live as LiveContent.System).event })
+    }
+
+    @Test
+    fun airplane_hidesWifiAndData_butNotLater() = test { h ->
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.AIRPLANE_ON, null, "On"))
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.WIFI_DISCONNECTED, null, "Disconnected"))
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.DATA_OFF, null, "Off"))
+        assertEquals(listOf(SystemEvent.AIRPLANE_ON), h.state.items.map { (it.live as LiveContent.System).event })
+        advanceTimeBy(GlanceCascade.WINDOW_MS + 100); runCurrent()
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.WIFI_CONNECTED, null, "Connected"))
+        assertEquals("a later, unrelated change still shows", SystemEvent.WIFI_CONNECTED, (h.state.current?.live as LiveContent.System).event)
+    }
+
+    @Test
     fun timerPause_keepsTheCardOpen() = test { h ->
         h.engine.onPosted(Fixtures.clockTimer())
         h.engine.onGesture(IslandGesture.TAP)
