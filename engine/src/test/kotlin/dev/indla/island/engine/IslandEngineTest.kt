@@ -363,10 +363,13 @@ class IslandEngineTest {
         assertEquals(2, h.state.current?.stack?.size)
         assertEquals(1, h.state.current?.stack?.index)
 
-        h.engine.onGesture(IslandGesture.SWIPE_RIGHT)
-        assertEquals("right goes to the older message", "Priya Rao", h.state.current?.title)
+        h.engine.onGesture(IslandGesture.SWIPE_UP)
+        assertEquals("up takes the next card: the older message", "Priya Rao", h.state.current?.title)
+        assertEquals(1, h.state.pageTurn)
+        h.engine.onGesture(IslandGesture.SWIPE_DOWN)
+        assertEquals("down brings the newer one back", "Arjun", h.state.current?.title)
         h.engine.onGesture(IslandGesture.SWIPE_LEFT)
-        assertEquals("left comes back to the newer one", "Arjun", h.state.current?.title)
+        assertEquals("sideways doesn't turn pages", "Arjun", h.state.current?.title)
     }
 
     @Test
@@ -395,9 +398,9 @@ class IslandEngineTest {
         h.engine.onGesture(IslandGesture.TAP)
         assertEquals(IslandMode.EXPANDED, h.state.mode)
         assertEquals("starts at the oldest", 0, h.state.current?.stack?.index)
-        h.engine.onGesture(IslandGesture.SWIPE_LEFT)
-        assertEquals(1, h.state.current?.stack?.index)
-        h.engine.onGesture(IslandGesture.SWIPE_UP) // collapse: both pages were seen
+        h.engine.onGesture(IslandGesture.SWIPE_UP)
+        assertEquals("up goes forward through the pile", 1, h.state.current?.stack?.index)
+        h.engine.onGesture(IslandGesture.SWIPE_UP) // past the end: collapse; both pages were seen
         assertEquals(IslandMode.REST, h.state.mode)
     }
 
@@ -484,7 +487,9 @@ class IslandEngineTest {
         assertEquals(IslandMode.EXPANDED, h.state.mode)
         assertEquals(75, (h.state.current?.live as LiveContent.System).level)
         advanceTimeBy(IslandEngine.SHOWCASE_MS); runCurrent()
-        assertEquals("gone, not lingering as a pill", IslandMode.REST, h.state.mode)
+        assertEquals("the card closes into the pill", IslandMode.COMPACT, h.state.mode)
+        advanceTimeBy(IslandEngine.COMPACT_TAIL_MS); runCurrent()
+        assertEquals("then it leaves", IslandMode.REST, h.state.mode)
     }
 
     @Test
@@ -507,7 +512,7 @@ class IslandEngineTest {
         h.engine.onActionTapped(dev.indla.island.model.ActionRole.TORCH_OFF_INDEX)
         assertEquals(listOf("action:system:flashlight:-6"), h.effects.calls)
         h.engine.onSystemEvent(LiveContent.System(SystemEvent.FLASHLIGHT_OFF, null, "Off"))
-        advanceTimeBy(IslandEngine.SHOWCASE_MS + 100); runCurrent()
+        advanceTimeBy(IslandEngine.SHOWCASE_MS + IslandEngine.COMPACT_TAIL_MS + 100); runCurrent()
         assertEquals(IslandMode.REST, h.state.mode)
     }
 
@@ -542,7 +547,7 @@ class IslandEngineTest {
         h.engine.onSystemEvent(LiveContent.System(SystemEvent.CHARGING, 54, "54%"))
         assertEquals(ItemKind.SYSTEM, h.state.current?.kind)
         assertEquals("system glances open by default", IslandMode.EXPANDED, h.state.mode)
-        advanceTimeBy(IslandEngine.SHOWCASE_MS + 100); runCurrent()
+        advanceTimeBy(IslandEngine.SHOWCASE_MS + IslandEngine.COMPACT_TAIL_MS + 100); runCurrent()
         assertEquals(IslandMode.REST, h.state.mode)
         h.settings.value = h.settings.value.copy(live = h.settings.value.live.copy(charging = false))
         runCurrent()

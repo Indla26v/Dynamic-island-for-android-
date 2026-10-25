@@ -2,6 +2,7 @@ package dev.indla.island.ui.island
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector4D
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.TwoWayConverter
@@ -58,6 +59,10 @@ private const val FADE_IN_MS = 200
 /** New content settles in from slightly smaller while it fades in. */
 private const val CONTENT_START_SCALE = 0.94f
 private const val SLIDE_DP = 28f
+private const val LIFT_DP = 10f
+/** How far an expanded stack's card travels on a page turn, and how small the next one starts. */
+private const val PAGE_LIFT_DP = 22f
+private const val DECK_START_SCALE = 0.95f
 
 /** The cards behind a stacked island: lighter the further back, so the layers read on black. */
 private val DeckColors = listOf(Color(0xFF3A3A3C), Color(0xFF242426))
@@ -95,6 +100,8 @@ fun IslandSurface(
     /** Horizontal slide (dp) of content when the island switches to another item. */
     val contentShift = remember { Animatable(0f) }
     val contentScale = remember { Animatable(1f) }
+    /** Vertical lift (dp) when the pill switches items. */
+    val contentLift = remember { Animatable(0f) }
     /** A short spring "pop" of the whole island when something new arrives. */
     val pulse = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
@@ -113,6 +120,11 @@ fun IslandSurface(
             // the new content slides in from the side instead of only fading.
             val switching = shown.mode == latest.mode && shown.current != null && latest.current != null &&
                 shown.current?.key != latest.current?.key
+            // A page turn in a stack moves like a deck: the card lifts away in the swipe's direction
+            // while it fades, and the next one rises into place from the other side.
+            val turn = if (switching && shown.currentIndex == latest.currentIndex) latest.pageTurn else 0
+            val deck = if (latest.mode == IslandMode.EXPANDED) PAGE_LIFT_DP else LIFT_DP
+            if (turn != 0) launch { contentLift.animateTo(-turn * deck, tween(CONTENT_DELAY_MS.toInt(), easing = FastOutLinearInEasing)) }
             if (!shrinking) contentAlpha.animateTo(0f, tween(CONTENT_DELAY_MS.toInt()))
             else delay(CONTENT_DELAY_MS)
             val from = shown.current?.stack
@@ -125,9 +137,19 @@ fun IslandSurface(
                     latest.items.indexOfFirst { it.key == shown.current?.key }
             }
             shown = latest
-            if (switching) {
+            if (turn != 0) {
+                contentLift.snapTo(turn * deck)
+                contentScale.snapTo(DECK_START_SCALE)
+                launch { contentLift.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)) }
+                launch { contentScale.animateTo(1f, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)) }
+            } else if (switching && latest.mode == IslandMode.EXPANDED) {
                 contentShift.snapTo(if (forward) SLIDE_DP else -SLIDE_DP)
                 launch { contentShift.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) }
+            } else if (switching) {
+                // In the pill the content flanks the camera: sliding sideways would carry it under
+                // the camera, so the new item lifts in instead.
+                contentLift.snapTo(if (forward) LIFT_DP else -LIFT_DP)
+                launch { contentLift.animateTo(0f, spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium)) }
             } else {
                 contentScale.snapTo(CONTENT_START_SCALE)
                 launch { contentScale.animateTo(1f, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)) }
@@ -255,6 +277,7 @@ fun IslandSurface(
             Box(
                 Modifier.fillMaxSize().graphicsLayer {
                     translationX = contentShift.value.dp.toPx()
+                    translationY = contentLift.value.dp.toPx()
                     scaleX = contentScale.value
                     scaleY = contentScale.value
                     // Settle in toward the camera, where the shape grows from.

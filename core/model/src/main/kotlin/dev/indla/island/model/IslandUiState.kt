@@ -14,6 +14,8 @@ data class IslandUiState(
     val replyOpen: Boolean = false,
     val quickActionsOpen: Boolean = false,
     val positionEditing: Boolean = false,
+    /** The last change was a page turn in a stack: 1 swiped up, -1 swiped down, 0 not a page turn. */
+    val pageTurn: Int = 0,
     val appearance: IslandAppearance = IslandAppearance(),
 ) {
     val current: IslandItem? get() = items.getOrNull(currentIndex)

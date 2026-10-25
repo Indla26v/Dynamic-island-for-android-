@@ -102,6 +102,8 @@ class IslandEngine(
     /** Size from the Look screen's slider while it is dragged, before it is saved. */
     private var previewScale: Float? = null
     private var timer: Job? = null
+    /** Set by a page turn for the one state it produces. */
+    private var pageTurn = 0
     /** Digital Wellbeing's "Bedtime mode is on" notification, while it's up. */
     private var bedtimeKey: String? = null
     /** Link to Windows' ongoing "connected" notification, while it's up. */
@@ -363,7 +365,9 @@ class IslandEngine(
         // Unlocking happens many times a day: open, but only briefly.
         val shown = if (event.event == SystemEvent.UNLOCKED || event.event == SystemEvent.AUTH_FAILED) BRIEF_SHOWCASE_MS else SHOWCASE_MS
         // The flashlight stays on the island, with a button to turn it off, until it's off.
-        val expires = if (event.event == SystemEvent.FLASHLIGHT_ON) FOREVER else clock() + shown
+        // Open for [shown], then it settles into the pill for a moment before leaving, so a glance
+        // always collapses instead of vanishing from the open card.
+        val expires = if (event.event == SystemEvent.FLASHLIGHT_ON) FOREVER else clock() + shown + COMPACT_TAIL_MS
         insert(Active(item, expires, selfTest = false), autoExpand = showcase && !busy())
         if (showcase && expanded) expandedDeadline = clock() + shown
         publish()
@@ -374,7 +378,27 @@ class IslandEngine(
     fun onGesture(gesture: IslandGesture) {
         if (active.isEmpty()) return
         touch()
+        if (turnPage(gesture)) return
         perform(settings.gestures.resolve(gesture, expanded), gesture)
+    }
+
+    /**
+     * A stack is a deck: swiping up takes the next card, swiping down brings the last one back.
+     * A fresh stack starts on its newest card and goes back in time; the missed pile starts on
+     * its oldest and goes forward. Past either end the swipe does what it normally does
+     * (collapse, hide, expand), so nothing is lost.
+     */
+    private fun turnPage(gesture: IslandGesture): Boolean {
+        if (gesture != IslandGesture.SWIPE_UP && gesture != IslandGesture.SWIPE_DOWN) return false
+        val entry = active.getOrNull(currentIndex) ?: return false
+        if (entry.pages.size < 2 || busy()) return false
+        val deck = if (entry.missed) 1 else -1
+        val page = entry.page + if (gesture == IslandGesture.SWIPE_UP) deck else -deck
+        if (page !in entry.pages.indices) return false
+        entry.page = page
+        pageTurn = if (gesture == IslandGesture.SWIPE_UP) 1 else -1
+        publish()
+        return true
     }
 
     fun onActionTapped(actionIndex: Int) {
@@ -717,15 +741,10 @@ class IslandEngine(
             }
             GestureAction.COLLAPSE -> collapse()
             GestureAction.SWITCH_ITEM -> {
-                // Left = newer page, right = older; past either end of a stack, the next item.
+                // Sideways moves between items (music, a call, a chat); pages are vertical.
+                if (active.size < 2) return
                 val step = if (gesture == IslandGesture.SWIPE_RIGHT) -1 else 1
-                val entry = active[currentIndex]
-                val page = entry.page + step
-                when {
-                    page in entry.pages.indices -> entry.page = page
-                    active.size > 1 -> currentIndex = (currentIndex + step).mod(active.size)
-                    else -> return
-                }
+                currentIndex = (currentIndex + step).mod(active.size)
                 replyOpen = false
                 quickActionsOpen = false
             }
@@ -885,8 +904,10 @@ class IslandEngine(
             replyOpen = replyOpen,
             quickActionsOpen = quickActionsOpen,
             positionEditing = positionEditing,
+            pageTurn = pageTurn,
             appearance = previewScale?.let { settings.appearance.copy(sizeScale = it) } ?: settings.appearance,
         )
+        pageTurn = 0
         reschedule()
     }
 
@@ -935,6 +956,8 @@ class IslandEngine(
         /** How long the headphones card stays open. */
         const val SHOWCASE_MS = 3_500L
         const val BRIEF_SHOWCASE_MS = 2_500L
+        /** How long a glance stays as the pill after its card closes. */
+        const val COMPACT_TAIL_MS = 2_500L
         /** How long paused media stays before it leaves the island. */
         const val LIVE_LINGER_MS = 10_000L
         const val MAX_ITEMS = 5

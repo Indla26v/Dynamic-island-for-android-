@@ -516,6 +516,8 @@ private fun SilentBell(color: Color, size: Dp) {
 private fun LegacyGlyph(event: SystemEvent, color: Color, size: Dp) {
     val shake = rememberShake()
     val flash = rememberReveal(1_000)
+    // Everything without a motion of its own pops in with a little spring.
+    val pop = rememberSpringIn(0.5f, 1f, 0.45f, Spring.StiffnessMediumLow)
     Icon(
         systemIcon(event),
         null,
@@ -533,7 +535,11 @@ private fun LegacyGlyph(event: SystemEvent, color: Color, size: Dp) {
                     scaleY = pop
                 }
                 SystemEvent.HEADPHONES_CONNECTED, SystemEvent.HEADPHONES_DISCONNECTED -> rotationZ = 10f * shake
-                else -> Unit
+                else -> {
+                    scaleX = pop
+                    scaleY = pop
+                    alpha = ((pop - 0.5f) * 2f).coerceIn(0f, 1f)
+                }
             }
         },
     )
