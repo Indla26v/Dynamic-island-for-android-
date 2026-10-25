@@ -235,6 +235,57 @@ object Fixtures {
         actions = listOf(RawAction(0, "Pause"), RawAction(1, "Add 1 minute")),
     )
 
+    /** Zomato's order tracking: ongoing, no category, no progress bar; the ETA lives in the text. */
+    fun zomatoOnTheWay() = RawNotification(
+        key = "0|com.application.zomato|42|null|10333",
+        packageName = "com.application.zomato",
+        appLabel = "Zomato",
+        postTime = 40_000,
+        ongoing = true,
+        onlyAlertOnce = true,
+        title = "Your order is on the way",
+        text = "Arriving in 12 mins",
+        actions = listOf(RawAction(0, "Call rider")),
+    )
+
+    /** Swiggy Instamart with a progress bar. */
+    fun instamartPacking() = RawNotification(
+        key = "0|in.swiggy.android|7|null|10334",
+        packageName = "in.swiggy.android",
+        appLabel = "Swiggy",
+        postTime = 40_000,
+        ongoing = true,
+        title = "Instamart order is being packed",
+        text = "Delivery in 9 min",
+        progress = 30,
+        progressMax = 100,
+    )
+
+    /** redBus live tracking: the bus's distance from the boarding point. */
+    fun redbusTracking() = RawNotification(
+        key = "0|in.redbus.android|3|null|10663",
+        packageName = "in.redbus.android",
+        appLabel = "redBus",
+        postTime = 40_000,
+        ongoing = true,
+        category = "status",
+        title = "Your bus is on the way",
+        text = "Bus is 3.2 km away from your boarding point",
+    )
+
+    /** Uber with a running chronometer: must be a ride, not a timer. */
+    fun uberArriving() = RawNotification(
+        key = "0|com.ubercab|5|ride|10298",
+        packageName = "com.ubercab",
+        appLabel = "Uber",
+        postTime = 40_000,
+        ongoing = true,
+        title = "Your driver is arriving",
+        text = "Ramesh · KA 01 AB 1234 · 3 min away",
+        chronometerBase = 40_000L + 180_000,
+        chronometerCountDown = true,
+    )
+
     /** Google Maps navigating, as read off a phone: distance, road, ETA, an arrow, Exit. */
     fun mapsNavigation() = RawNotification(
         key = "0|com.google.android.apps.maps|1|null|10207",

@@ -54,6 +54,9 @@ class NotificationExtractor @Inject constructor(
         val showsChronometer = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)
         // A timer drawn only as a custom view (vivo Clock): read its Chronometer.
         val custom = if (ongoing && title == null && text == null && metric == null && !showsChronometer) customViews.timer(n) else null
+        // Tracking drawn only as a custom view (delivery and ride apps): read its text and bar.
+        val content = if (ongoing && title == null && text == null && metric == null && custom == null) customViews.content(n) else null
+        val customMax = content?.max?.takeIf { progressMax <= 0 }
         val callPerson = callPerson(extras)
         val caller = callPerson?.name?.toString() ?: title
 
@@ -69,9 +72,10 @@ class NotificationExtractor @Inject constructor(
             ongoing = ongoing,
             category = n.category,
             channelId = n.channelId,
-            title = title ?: metric?.label ?: custom?.label,
-            text = text ?: criticalText ?: custom?.shownTime,
-            bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString(),
+            title = title ?: metric?.label ?: custom?.label ?: content?.texts?.getOrNull(0),
+            text = text ?: criticalText ?: custom?.shownTime ?: content?.texts?.getOrNull(1),
+            bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+                ?: content?.texts?.drop(2)?.joinToString(" · ")?.takeIf { it.isNotEmpty() },
             subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString(),
             conversationTitle = style?.conversationTitle?.toString(),
             isGroupConversation = style?.isGroupConversation == true,
@@ -86,8 +90,8 @@ class NotificationExtractor @Inject constructor(
             },
             ranking = ranking(sbn.key, rankingMap),
             template = extras.getString(Notification.EXTRA_TEMPLATE),
-            progress = extras.getInt(Notification.EXTRA_PROGRESS, 0),
-            progressMax = progressMax,
+            progress = if (customMax != null) content.progress ?: 0 else extras.getInt(Notification.EXTRA_PROGRESS, 0),
+            progressMax = customMax ?: progressMax,
             progressIndeterminate = indeterminate,
             callType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 extras.getInt(Notification.EXTRA_CALL_TYPE, 0)

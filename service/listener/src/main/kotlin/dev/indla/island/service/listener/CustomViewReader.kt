@@ -6,6 +6,7 @@ import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Chronometer
+import android.widget.ProgressBar
 import android.widget.FrameLayout
 import android.widget.TextView
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -32,6 +33,23 @@ class CustomViewReader @Inject constructor(
     )
 
     enum class Control { TOGGLE, STOP }
+
+    /** What a custom-drawn notification says: its visible text in order, and its progress bar. */
+    class Content(val texts: List<String>, val progress: Int?, val max: Int?)
+
+    /**
+     * Delivery and ride apps (Zomato, Swiggy, redBus...) often draw their tracking entirely in a
+     * custom view and leave the title and text empty; inflate it and read what it shows.
+     */
+    fun content(n: Notification): Content? {
+        @Suppress("DEPRECATION")
+        val views = n.bigContentView ?: n.contentView ?: return null
+        val root = runCatching { views.apply(context, FrameLayout(context)) }.getOrNull() ?: return null
+        val texts = buildList { collectTexts(root, this) }.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        val bar = find(root) { it is ProgressBar && it.visibility == View.VISIBLE && !it.isIndeterminate && it.max > 0 } as? ProgressBar
+        if (texts.isEmpty() && bar == null) return null
+        return Content(texts.take(MAX_TEXTS), bar?.progress, bar?.max)
+    }
 
     /** Only for ongoing notifications whose content lives entirely in a custom view. */
     fun timer(n: Notification): Timer? {
@@ -109,6 +127,7 @@ class CustomViewReader @Inject constructor(
 
     private companion object {
         val TIME = Regex("""-?\d{1,2}(:\d{2}){1,2}""")
+        const val MAX_TEXTS = 4
         val PAUSED_ACTION = Regex("""(?i)\b(resume|start|continue)\b""")
         val PAUSED_LABEL = Regex("""(?i)\b(paused|resume|continue)\b""")
         // Whole labels only: "Recording" is the resume button in vivo Recorder's view.

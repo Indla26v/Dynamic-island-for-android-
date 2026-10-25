@@ -130,9 +130,15 @@ class NotificationParserTest {
         val food = show(Fixtures.foodDeliveryProgress())
         assertEquals(ItemKind.PROGRESS, food.kind)
         assertEquals(0.4f, (food.live as LiveContent.Progress).fraction!!, 0.001f)
-        assertEquals("40%", food.glance)
+        assertEquals("the ETA says more than the percentage", "12 min", food.glance)
         assertEquals(ItemKind.PROGRESS, show(Fixtures.cabRide()).kind)
         assertEquals("Arriving in 12 min", (show(Fixtures.cabRide()).live as LiveContent.Progress).status)
+    }
+
+    @Test
+    fun aDownloadWithTimeLeft_isNotADelivery() {
+        val live = show(Fixtures.downloadProgress(45)).live as LiveContent.Progress
+        assertEquals(null, live.tracking)
     }
 
     @Test
@@ -177,6 +183,41 @@ class NotificationParserTest {
         assertTrue(timer.countDown)
         assertEquals(listOf("Pause", "Add 1 minute"), item.actions.map { it.title })
         assertEquals(listOf(ActionRole.PAUSE, ActionRole.NORMAL), item.actions.map { it.role })
+    }
+
+    @Test
+    fun zomato_ongoingWithoutProgress_isTrackedWithItsEta() {
+        val item = show(Fixtures.zomatoOnTheWay())
+        val live = item.live as LiveContent.Progress
+        assertEquals(dev.indla.island.model.Tracking.FOOD, live.tracking)
+        assertEquals("12 min", live.eta)
+        assertEquals("12 min", item.glance)
+        assertEquals("Arriving in 12 mins", live.status)
+        assertEquals(listOf("Call rider"), item.actions.map { it.title })
+    }
+
+    @Test
+    fun instamart_keepsItsProgress() {
+        val live = show(Fixtures.instamartPacking()).live as LiveContent.Progress
+        assertEquals(dev.indla.island.model.Tracking.FOOD, live.tracking)
+        assertEquals(0.3f, live.fraction!!, 0.001f)
+        assertEquals("9 min", live.eta)
+    }
+
+    @Test
+    fun redbus_isABus_withItsDistance() {
+        val live = show(Fixtures.redbusTracking()).live as LiveContent.Progress
+        assertEquals(dev.indla.island.model.Tracking.BUS, live.tracking)
+        assertEquals("3.2 km", live.eta)
+    }
+
+    @Test
+    fun uber_withAClock_isARide_notATimer() {
+        val item = show(Fixtures.uberArriving())
+        assertEquals(ItemKind.PROGRESS, item.kind)
+        val live = item.live as LiveContent.Progress
+        assertEquals(dev.indla.island.model.Tracking.RIDE, live.tracking)
+        assertEquals("3 min", live.eta)
     }
 
     @Test

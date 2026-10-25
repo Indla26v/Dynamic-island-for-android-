@@ -10,6 +10,7 @@ import dev.indla.island.model.LiveContent
 import dev.indla.island.model.MessageLine
 import dev.indla.island.model.RawMessage
 import dev.indla.island.model.RawNotification
+import dev.indla.island.model.Tracking
 import kotlin.math.roundToInt
 
 sealed interface ParseResult {
@@ -45,6 +46,8 @@ class NotificationParser(
 
         val item = when {
             isCall(raw) -> callItem(raw)
+            // Before timers: a ride or delivery often runs a clock ("arriving in") too.
+            trackingKind(raw) != null -> trackingItem(raw, trackingKind(raw)!!)
             isTimer(raw) -> timerItem(raw)
             raw.category in SYSTEM_CATEGORIES -> return ParseResult.Skip(SkipReason.SYSTEM_CATEGORY)
             isNavigation(raw) -> navigationItem(raw)
@@ -180,6 +183,59 @@ class NotificationParser(
             avatarKey = raw.largeIconKey,
             live = LiveContent.Call(caller, state, raw.chronometerBase ?: raw.postTime),
         )
+    }
+
+    /**
+     * A delivery, ride, bus or parcel being tracked: an ongoing notification from an app known to
+     * track (Zomato, Swiggy and Instamart, Blinkit, Zepto, Uber, Ola, Rapido, redBus...), or any
+     * ongoing progress/status notification whose text gives an arrival time. Null otherwise.
+     */
+    fun trackingKind(raw: RawNotification): Tracking? {
+        if (!raw.ongoing) return null
+        val known = TRACKING_APPS[raw.packageName]
+        val text = listOfNotNull(raw.title, raw.text, raw.bigText, raw.subText).joinToString(" ")
+        val byWords = when {
+            BUS_WORDS.containsMatchIn(text) -> Tracking.BUS
+            RIDE_WORDS.containsMatchIn(text) -> Tracking.RIDE
+            PARCEL_WORDS.containsMatchIn(text) -> Tracking.PARCEL
+            else -> null
+        }
+        return when {
+            known != null -> byWords?.takeIf { known == Tracking.PARCEL || it == known } ?: known
+            // Other apps: a status / location-sharing notification that talks like a delivery
+            // or ride and gives an arrival time. (Downloads say "2 min left" too; they aren't.)
+            raw.category in TRACKING_CATEGORIES && eta(text) != null && (byWords != null || ON_ITS_WAY.containsMatchIn(text)) ->
+                byWords ?: Tracking.FOOD
+            else -> null
+        }
+    }
+
+    private fun trackingItem(raw: RawNotification, kind: Tracking): IslandItem {
+        val texts = listOfNotNull(raw.title, raw.text, raw.bigText, raw.subText).map { it.trim() }.filter { it.isNotEmpty() }
+        val eta = eta(texts.joinToString(" "))
+        val fraction = if (raw.hasProgress && raw.progressMax > 0 && !raw.progressIndeterminate) {
+            (raw.progress.toFloat() / raw.progressMax).coerceIn(0f, 1f)
+        } else {
+            null
+        }
+        val title = raw.title?.trim()?.takeIf { it.isNotEmpty() } ?: raw.appLabel
+        val status = texts.firstOrNull { it != title }.orEmpty()
+        return baseItem(raw).copy(
+            kind = ItemKind.PROGRESS,
+            title = title,
+            glance = eta ?: fraction?.let { "${(it * 100).roundToInt()}%" } ?: status.takeIf { it.length <= 12 }.orEmpty(),
+            lines = listOfNotNull(status.takeIf { it.isNotEmpty() }?.let { MessageLine(null, it) }),
+            avatarKey = raw.largeIconKey,
+            live = LiveContent.Progress(fraction, status, eta = eta, tracking = kind),
+        )
+    }
+
+    /** "12 min" from "Arriving in 12 mins", "in 8 minutes", "12 min away"; or "7:45 PM", or "3 km away". */
+    fun eta(text: String): String? {
+        MINUTES.find(text)?.let { return "${it.groupValues[1]} min" }
+        CLOCK_TIME.find(text)?.let { return it.value.trim() }
+        DISTANCE.find(text)?.let { return "${it.groupValues[1]} ${it.groupValues[2].lowercase()}" }
+        return null
     }
 
     /** Google Maps, Waze and other turn-by-turn apps while navigating. */
@@ -427,6 +483,38 @@ class NotificationParser(
         private val TIME = Regex("""-?\d{1,2}(:\d{2}){1,2}""")
 
         /** Ongoing notifications in these categories are deliveries, rides, navigation. */
+        /** Apps whose ongoing notifications track something on its way, and what it is. */
+        val TRACKING_APPS = mapOf(
+            "com.application.zomato" to Tracking.FOOD,
+            "in.swiggy.android" to Tracking.FOOD,
+            "com.done.faasos" to Tracking.FOOD,
+            "com.global.foodpanda.android" to Tracking.FOOD,
+            "com.grofers.customerapp" to Tracking.GROCERY,
+            "in.swiggy.android.instamart" to Tracking.GROCERY,
+            "com.zeptoconsumerapp" to Tracking.GROCERY,
+            "com.bigbasket.mobileapp" to Tracking.GROCERY,
+            "com.dunzo.user" to Tracking.GROCERY,
+            "com.jio.jiomart" to Tracking.GROCERY,
+            "com.ubercab" to Tracking.RIDE,
+            "com.olacabs.customer" to Tracking.RIDE,
+            "com.rapido.passenger" to Tracking.RIDE,
+            "com.bluesmart.blusmartapp" to Tracking.RIDE,
+            "com.theporter.android.customerapp" to Tracking.PARCEL,
+            "in.redbus.android" to Tracking.BUS,
+            "com.abhibus.mobile" to Tracking.BUS,
+            "in.amazon.mShop.android.shopping" to Tracking.PARCEL,
+            "com.flipkart.android" to Tracking.PARCEL,
+            "com.myntra.android" to Tracking.PARCEL,
+            "com.meesho.supply" to Tracking.PARCEL,
+        )
+        val TRACKING_CATEGORIES = setOf("status", "location_sharing", "transport_tracking")
+        val ON_ITS_WAY = Regex("(?i)arriv|on (its|the) way|deliver|your order|picked up|rider|eta")
+        val BUS_WORDS = Regex("(?i)\\bbus\\b|boarding point|bus stop")
+        val RIDE_WORDS = Regex("(?i)\\b(driver|captain|cab|auto|ride|pickup|pick-up|bike taxi)\\b")
+        val PARCEL_WORDS = Regex("(?i)out for delivery|shipped|package|parcel|courier")
+        val MINUTES = Regex("(?i)(\\d{1,3})\\s*(?:-\\s*\\d{1,3}\\s*)?(?:min|mins|minute|minutes)\\b")
+        val CLOCK_TIME = Regex("(?i)\\b\\d{1,2}:\\d{2}\\s*(?:am|pm)?\\b")
+        val DISTANCE = Regex("(?i)(\\d+(?:\\.\\d+)?)\\s*(km|m)\\s+away")
         val NAVIGATION_PACKAGES = setOf(
             "com.google.android.apps.maps",
             "com.google.android.apps.mapslite",

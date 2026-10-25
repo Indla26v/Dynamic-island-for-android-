@@ -220,6 +220,13 @@ private fun RowScope.CompactTrailing(item: IslandItem, accent: Color, minimal: B
         is LiveContent.Progress -> if (live.navigation) {
             // The distance to the next turn, large and white: readable at a glance while driving.
             Text(item.glance, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, style = Tabular)
+        } else if (live.tracking != null) {
+            // What's coming and when: the scooter / cab / bus and its ETA.
+            Icon(vehicleIcon(live.tracking!!), null, tint = accent, modifier = Modifier.size(18.dp))
+            if (item.glance.isNotEmpty()) {
+                Spacer(Modifier.width(4.dp))
+                GlanceText(item.glance, accent)
+            }
         } else {
             if (item.glance.isNotEmpty() && !minimal) {
                 GlanceText(item.glance, accent)
@@ -395,6 +402,8 @@ private fun Band(item: IslandItem, layout: IslandLayout, rect: IslandRect, pad: 
                 }
                 is LiveContent.Progress -> if (live.navigation) {
                     live.eta?.let { Text(it, color = Secondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                } else if (live.tracking != null) {
+                    Unit
                 } else {
                     live.fraction?.let {
                         Text("${(it * 100).toInt()}%", color = accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, style = Tabular)
@@ -694,6 +703,10 @@ private fun ProgressBody(item: IslandItem, progress: LiveContent.Progress, accen
         NavigationBody(item, progress, registry)
         return
     }
+    if (progress.tracking != null) {
+        TrackingBody(item, progress, progress.tracking!!, accent, registry)
+        return
+    }
     Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically) {
         AvatarWithBadge(item, 36.dp)
         Spacer(Modifier.width(12.dp))
@@ -722,6 +735,40 @@ private fun ProgressBody(item: IslandItem, progress: LiveContent.Progress, accen
         Spacer(Modifier.height(IslandLayout.GAP.dp))
         ButtonRow {
             item.actions.forEach { action ->
+                PillButton(action.title, null, registry, HitRegistry.action(action.index), Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+/**
+ * A delivery, ride or bus on its way: what's happening and its route on the left, the ETA large
+ * on the right, the app's own buttons (call the rider, share) below.
+ */
+@Composable
+private fun TrackingBody(item: IslandItem, progress: LiveContent.Progress, tracking: dev.indla.island.model.Tracking, accent: Color, registry: HitRegistry?) {
+    Row(Modifier.fillMaxWidth().height(IslandLayout.PROGRESS_BODY.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(item.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (progress.status.isNotEmpty()) {
+                Text(progress.status, color = Secondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.height(4.dp))
+            TrackingRoute(tracking, progress.fraction, accent, Modifier.fillMaxWidth().height(24.dp))
+        }
+        progress.eta?.let { eta ->
+            Spacer(Modifier.width(14.dp))
+            val (value, unit) = eta.split(' ', limit = 2).let { it[0] to it.getOrNull(1).orEmpty() }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(value, color = accent, fontSize = if (value.length > 3) 20.sp else 28.sp, fontWeight = FontWeight.Bold, style = Tabular, maxLines = 1)
+                if (unit.isNotEmpty()) Text(unit, color = Secondary, fontSize = 12.sp, maxLines = 1)
+            }
+        }
+    }
+    if (item.actions.isNotEmpty()) {
+        Spacer(Modifier.height(IslandLayout.GAP.dp))
+        ButtonRow {
+            item.actions.take(2).forEach { action ->
                 PillButton(action.title, null, registry, HitRegistry.action(action.index), Modifier.weight(1f))
             }
         }

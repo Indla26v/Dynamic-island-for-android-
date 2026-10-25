@@ -144,8 +144,10 @@ sealed interface LiveContent {
         val status: String,
         /** Turn-by-turn directions: the title is the distance, the large icon the turn. */
         val navigation: Boolean = false,
-        /** "9 min · 3.8 km · 16:41 ETA". */
+        /** "9 min · 3.8 km · 16:41 ETA" for navigation; "12 min" for a delivery or ride. */
         val eta: String? = null,
+        /** A delivery, ride, bus or parcel on its way: drawn as a route with the vehicle on it. */
+        val tracking: Tracking? = null,
     ) : LiveContent {
         override val stableKey get() = status.isNotEmpty()
     }
@@ -180,6 +182,9 @@ sealed interface LiveContent {
 }
 
 enum class CallState { INCOMING, ONGOING, SCREENING }
+
+/** What's on its way, so the island draws the right vehicle and destination. */
+enum class Tracking { FOOD, GROCERY, RIDE, BUS, PARCEL }
 
 /** Earbuds come out of a case, over-ear headphones snap together, a speaker pumps. */
 enum class AudioKind { EARBUDS, HEADPHONES, SPEAKER, OTHER }
