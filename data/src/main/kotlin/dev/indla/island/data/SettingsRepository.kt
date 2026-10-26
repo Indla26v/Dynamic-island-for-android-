@@ -48,7 +48,8 @@ class SettingsRepository @Inject constructor(
         val hideFullscreen = booleanPreferencesKey("hide_fullscreen")
         val hideLandscape = booleanPreferencesKey("hide_landscape")
         val showLockscreen = booleanPreferencesKey("show_lockscreen")
-        val hideShade = booleanPreferencesKey("hide_shade")
+        // v2: the default flipped to "stay over the panel", so older saved values start fresh.
+        val hideShade = booleanPreferencesKey("hide_shade_v2")
         val keepMissed = booleanPreferencesKey("keep_missed")
         val stackByApp = booleanPreferencesKey("stack_by_app")
         val autoHide = intPreferencesKey("auto_hide_seconds")

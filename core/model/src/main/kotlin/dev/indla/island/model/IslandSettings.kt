@@ -86,7 +86,8 @@ data class WhenToShow(
     val hideInFullscreen: Boolean = true,
     val hideInLandscape: Boolean = true,
     val showOnLockscreen: Boolean = true,
-    val hideWhenShadeOpen: Boolean = true,
+    /** Off by default: the island stays on top while the notification panel is pulled down. */
+    val hideWhenShadeOpen: Boolean = false,
     /** Notifications that left the island unopened stay as a small "missed" pile. */
     val keepMissed: Boolean = true,
     /** One app's notifications share one slot instead of one each. */

@@ -105,6 +105,9 @@ class IslandEngine(
     /** System events of the last few seconds, to tell causes from their side effects. */
     private val recentSystem = ArrayDeque<Pair<SystemEvent, Long>>()
 
+    /** The message opened up for reading (swipe down), while it's the one shown. */
+    private var readMoreKey: String? = null
+
     /** Set by a page turn for the one state it produces. */
     private var pageTurn = 0
     /** Digital Wellbeing's "Bedtime mode is on" notification, while it's up. */
@@ -383,7 +386,19 @@ class IslandEngine(
         if (active.isEmpty()) return
         touch()
         if (turnPage(gesture)) return
+        if (readMore(gesture)) return
         perform(settings.gestures.resolve(gesture, expanded), gesture)
+    }
+
+    /** Swipe down on an open message: the card grows to show all its lines, with time to read. */
+    private fun readMore(gesture: IslandGesture): Boolean {
+        if (gesture != IslandGesture.SWIPE_DOWN || !expanded || busy()) return false
+        val item = current() ?: return false
+        if (readMoreKey == item.key || (item.kind != ItemKind.MESSAGE && item.kind != ItemKind.GENERIC)) return false
+        readMoreKey = item.key
+        expandedDeadline = clock() + READ_MORE_MS
+        publish()
+        return true
     }
 
     /**
@@ -818,6 +833,7 @@ class IslandEngine(
     private fun collapse() {
         expanded = false
         holding = false
+        readMoreKey = null
         replyOpen = false
         quickActionsOpen = false
         val now = clock()
@@ -928,6 +944,7 @@ class IslandEngine(
             quickActionsOpen = quickActionsOpen,
             positionEditing = positionEditing,
             pageTurn = pageTurn,
+            readMore = expanded && readMoreKey != null && readMoreKey == current()?.key,
             appearance = previewScale?.let { settings.appearance.copy(sizeScale = it) } ?: settings.appearance,
         )
         pageTurn = 0
@@ -981,6 +998,8 @@ class IslandEngine(
         const val BRIEF_SHOWCASE_MS = 2_500L
         /** How long a glance stays as the pill after its card closes. */
         const val COMPACT_TAIL_MS = 2_500L
+        /** Reading time once a message is opened up with a swipe down. */
+        const val READ_MORE_MS = 10_000L
         /** How long paused media stays before it leaves the island. */
         const val LIVE_LINGER_MS = 10_000L
         const val MAX_ITEMS = 5

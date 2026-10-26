@@ -132,6 +132,7 @@ data class IslandLayout(
             item.kind == ItemKind.SYSTEM -> SYSTEM_ROW + actionsHeight(item)
             item.kind == ItemKind.PROGRESS -> PROGRESS_BODY + actionsHeight(item)
             state.replyOpen -> notificationBody(minOf(item.lines.size, 1)) + GAP + REPLY_ROW
+            state.readMore -> max(AVATAR, TEXT_ROW * (1 + readingRows(item))) + actionsHeight(item)
             else -> notificationBody(item.lines.size.coerceAtMost(3)) + actionsHeight(item)
         }
         return bandHeight + body + PADDING_BOTTOM
@@ -156,6 +157,18 @@ data class IslandLayout(
         const val EXPANDED_RADIUS = 34f
         /** Expanded width for system glances. */
         const val GLANCE_WIDTH = 380f
+        /** Opened up for reading: up to this many lines, wrapping, within this many rows. */
+        const val READ_LINES = 8
+        const val MAX_READ_ROWS = 14
+        private const val CHARS_PER_ROW = 34
+
+        /** Rows a message takes when opened up for reading: each line wraps to what it needs. */
+        fun readingRows(item: IslandItem): Int =
+            item.lines.takeLast(READ_LINES).sumOf { rowsFor(it) }.coerceAtMost(MAX_READ_ROWS)
+
+        /** How many rows a line wraps to when reading (sender and text on the same flow). */
+        fun rowsFor(line: dev.indla.island.model.MessageLine): Int =
+            (((line.sender?.length ?: 0) + line.text.length) / CHARS_PER_ROW + 1).coerceAtMost(4)
         /** The slim glance bar's content row, and the space above and below it. */
         const val GLANCE_ROW = 44f
         const val GLANCE_PAD = 7f

@@ -7,7 +7,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,32 +20,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AirplanemodeActive
-import androidx.compose.material.icons.rounded.BatteryAlert
-import androidx.compose.material.icons.rounded.BatterySaver
-import androidx.compose.material.icons.rounded.Bedtime
-import androidx.compose.material.icons.rounded.Bolt
-import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Computer
-import androidx.compose.material.icons.rounded.ContentPaste
-import androidx.compose.material.icons.rounded.DarkMode
-import androidx.compose.material.icons.rounded.DoNotDisturbOn
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.Fingerprint
-import androidx.compose.material.icons.rounded.FlashlightOn
-import androidx.compose.material.icons.rounded.Headphones
-import androidx.compose.material.icons.rounded.LocalFireDepartment
-import androidx.compose.material.icons.rounded.LocationOn
-import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SelectAll
-import androidx.compose.material.icons.rounded.SwapVert
-import androidx.compose.material.icons.rounded.Timer
-import androidx.compose.material.icons.rounded.Visibility
-import androidx.compose.material.icons.rounded.Wifi
-import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -68,11 +44,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.indla.island.model.AppRule
 import dev.indla.island.model.IslandAppearance
-import dev.indla.island.model.LiveSettings
 import dev.indla.island.model.Priority
 import dev.indla.island.ui.island.AppIconImage
 import dev.indla.island.ui.settings.AppEntry
-import dev.indla.island.ui.settings.components.GlassChip
 import dev.indla.island.ui.settings.components.GlassToggleRow
 import dev.indla.island.ui.settings.components.IslandPreview
 import dev.indla.island.ui.settings.components.RowDivider
@@ -83,7 +57,7 @@ import dev.indla.island.ui.settings.components.TabScaffold
 import dev.indla.island.ui.settings.components.glassSurface
 import dev.indla.island.ui.settings.theme.LocalGlass
 
-/** Accent swatches shared by the Apps and Look & feel tabs. */
+/** Accent swatches shared by the Apps and Look tabs. */
 val AccentSwatches = listOf(0xFF8AB4F8, 0xFF7EE0B5, 0xFFFFC66D, 0xFFFF8A80, 0xFFD7AEFB, 0xFF80DEEA, 0xFFFFFFFF)
 
 private val IconSize = 36.dp
@@ -95,8 +69,6 @@ fun AppsScreen(
     apps: List<AppEntry>?,
     ruleFor: (String) -> AppRule,
     onSave: (AppRule) -> Unit,
-    live: LiveSettings,
-    onLive: ((LiveSettings) -> LiveSettings) -> Unit,
     onSetAll: (Boolean) -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -106,8 +78,14 @@ fun AppsScreen(
 
     // Rows sit 1 dp apart so each section reads as one inset group; sections add their own space.
     TabScaffold(title = "Apps", pinned = { IslandPreview(appearance, reduceTransparency) }, itemSpacing = 1.dp) {
-        item(key = "live") {
-            LiveCard(live, onLive, Modifier.padding(bottom = Space.cardGap))
+        item(key = "about") {
+            // One plain sentence instead of a wall of switches: what this list is for.
+            Text(
+                "Pick which apps' notifications pop up on the island. Music, calls, timers, downloads, deliveries and phone modes show on their own.",
+                color = LocalGlass.current.contentSecondary,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(start = Space.xs, end = Space.xs, bottom = Space.m),
+            )
         }
         item(key = "search") {
             SearchField(query, { query = it }, Modifier.padding(bottom = Space.s))
@@ -164,42 +142,6 @@ private fun LazyListScope.section(
             // Switching an app back on also lifts a long-press Mute.
             AppRow(app, rule, onToggle = { onSave(rule.copy(show = it, muted = rule.muted && !it)) }, onClick = { onExpand(if (open) null else app.packageName) })
             AnimatedVisibility(open) { RuleEditor(rule, onSave) }
-        }
-    }
-}
-
-/** Live activities and system events: what may use the island besides app notifications. */
-@Composable
-private fun LiveCard(live: LiveSettings, onLive: ((LiveSettings) -> LiveSettings) -> Unit, modifier: Modifier = Modifier) {
-    dev.indla.island.ui.settings.components.GlassCard(modifier, title = "Live activities") {
-        FlowRow(
-            Modifier.padding(horizontal = Space.rowPadding, vertical = Space.xs),
-            horizontalArrangement = Arrangement.spacedBy(Space.s),
-            verticalArrangement = Arrangement.spacedBy(Space.s),
-        ) {
-            GlassChip("Music", { onLive { it.copy(media = !it.media) } }, Icons.Rounded.MusicNote, live.media)
-            GlassChip("Calls", { onLive { it.copy(calls = !it.calls) } }, Icons.Rounded.Call, live.calls)
-            GlassChip("Progress", { onLive { it.copy(progress = !it.progress) } }, Icons.Rounded.Download, live.progress)
-            GlassChip("Timers", { onLive { it.copy(timers = !it.timers) } }, Icons.Rounded.Timer, live.timers)
-            GlassChip("Charging", { onLive { it.copy(charging = !it.charging) } }, Icons.Rounded.Bolt, live.charging)
-            GlassChip("Battery low", { onLive { it.copy(batteryLow = !it.batteryLow) } }, Icons.Rounded.BatteryAlert, live.batteryLow)
-            GlassChip("Ringer", { onLive { it.copy(ringer = !it.ringer) } }, Icons.Rounded.NotificationsActive, live.ringer)
-            GlassChip("Headphones", { onLive { it.copy(headphones = !it.headphones) } }, Icons.Rounded.Headphones, live.headphones)
-            GlassChip("Airplane", { onLive { it.copy(airplane = !it.airplane) } }, Icons.Rounded.AirplanemodeActive, live.airplane)
-            GlassChip("Flashlight", { onLive { it.copy(flashlight = !it.flashlight) } }, Icons.Rounded.FlashlightOn, live.flashlight)
-            GlassChip("Battery saver", { onLive { it.copy(batterySaver = !it.batterySaver) } }, Icons.Rounded.BatterySaver, live.batterySaver)
-            GlassChip("Monster mode", { onLive { it.copy(monster = !it.monster) } }, Icons.Rounded.LocalFireDepartment, live.monster)
-            GlassChip("Dark / light", { onLive { it.copy(theme = !it.theme) } }, Icons.Rounded.DarkMode, live.theme)
-            GlassChip("Wi-Fi", { onLive { it.copy(wifi = !it.wifi) } }, Icons.Rounded.Wifi, live.wifi)
-            GlassChip("Clipboard", { onLive { it.copy(clipboard = !it.clipboard) } }, Icons.Rounded.ContentPaste, live.clipboard)
-            GlassChip("Location", { onLive { it.copy(location = !it.location) } }, Icons.Rounded.LocationOn, live.location)
-            GlassChip("Do not disturb", { onLive { it.copy(dnd = !it.dnd) } }, Icons.Rounded.DoNotDisturbOn, live.dnd)
-            GlassChip("Bedtime", { onLive { it.copy(bedtime = !it.bedtime) } }, Icons.Rounded.Bedtime, live.bedtime)
-            GlassChip("Mobile data", { onLive { it.copy(mobileData = !it.mobileData) } }, Icons.Rounded.SwapVert, live.mobileData)
-            GlassChip("Face / fingerprint", { onLive { it.copy(unlock = !it.unlock) } }, Icons.Rounded.Fingerprint, live.unlock)
-            GlassChip("Hotspot", { onLive { it.copy(hotspot = !it.hotspot) } }, Icons.Rounded.WifiTethering, live.hotspot)
-            GlassChip("Eye protection", { onLive { it.copy(eyeProtection = !it.eyeProtection) } }, Icons.Rounded.Visibility, live.eyeProtection)
-            GlassChip("Link to Windows", { onLive { it.copy(linkToWindows = !it.linkToWindows) } }, Icons.Rounded.Computer, live.linkToWindows)
         }
     }
 }

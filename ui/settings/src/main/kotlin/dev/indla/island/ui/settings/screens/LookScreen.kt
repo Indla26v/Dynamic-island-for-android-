@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.OpenWith
+import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -57,6 +58,7 @@ import dev.indla.island.model.IslandSettings
 import dev.indla.island.model.StylePreset
 import dev.indla.island.model.WhenToShow
 import dev.indla.island.ui.settings.components.GlassCard
+import dev.indla.island.ui.settings.components.GlassRow
 import dev.indla.island.ui.settings.components.GlassSliderRow
 import dev.indla.island.ui.settings.components.GlassToggleRow
 import dev.indla.island.ui.settings.components.IslandPreview
@@ -105,9 +107,11 @@ fun LookScreen(
     }
     val previewAppearance = liveSize?.let { a.copy(sizeScale = it) } ?: a
 
-    TabScaffold(title = "Look & feel", pinned = { IslandPreview(previewAppearance, reduceTransparency, focusCompact = sizeTouches) }) {
+    var showGestures by rememberSaveable { mutableStateOf(false) }
+    TabScaffold(title = "Look", pinned = { IslandPreview(previewAppearance, reduceTransparency, focusCompact = sizeTouches) }) {
+        // Style: shape, colour and size, the three choices most people make.
         item {
-            GlassCard(title = "Appearance") {
+            GlassCard(title = "Style") {
                 Row(
                     Modifier.padding(horizontal = Space.rowPadding, vertical = Space.xs),
                     horizontalArrangement = Arrangement.spacedBy(Space.s),
@@ -141,35 +145,43 @@ fun LookScreen(
                         }
                     },
                 )
-                GlassToggleRow(
-                    "Glass card",
-                    a.glassCard,
-                    { v -> onAppearance { it.copy(glassCard = v) } },
-                    subtitle = "Frosted, blurred expanded card instead of solid black",
-                )
-                GlassSliderRow("Glass", a.glassIntensity, 0f..1f, { if (it < 0.5f) "Clear" else "Tinted" }, { v ->
-                    onAppearance { it.copy(glassIntensity = v) }
-                })
-                if (reduceTransparency) {
-                    Text(
-                        "Reduce transparency is on in system settings, so surfaces are solid.",
-                        color = glass.contentSecondary,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(horizontal = Space.rowPadding, vertical = Space.xs),
-                    )
-                }
+            }
+        }
+
+        // Effects: finishing touches, one switch each.
+        item {
+            GlassCard(title = "Effects") {
                 GlassToggleRow(
                     "Colour from app icon",
                     a.autoColour,
                     { v -> onAppearance { it.copy(autoColour = v) } },
-                    subtitle = "Tint each app's glance with its icon colour",
+                    subtitle = "Each app's glance in its own colour",
                 )
                 GlassToggleRow(
                     "Resting pill",
                     a.showRestPill,
                     { v -> onAppearance { it.copy(showRestPill = v) } },
-                    subtitle = "Keep a small pill around the camera",
+                    subtitle = "A small pill around the camera when idle",
                 )
+                GlassToggleRow(
+                    "Glass card",
+                    a.glassCard,
+                    { v -> onAppearance { it.copy(glassCard = v) } },
+                    subtitle = "Frosted card instead of solid black",
+                )
+                if (a.glassCard) {
+                    GlassSliderRow("Glass", a.glassIntensity, 0f..1f, { if (it < 0.5f) "Clear" else "Tinted" }, { v ->
+                        onAppearance { it.copy(glassIntensity = v) }
+                    })
+                    if (reduceTransparency) {
+                        Text(
+                            "Reduce transparency is on in system settings, so surfaces are solid.",
+                            color = glass.contentSecondary,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = Space.rowPadding, vertical = Space.xs),
+                        )
+                    }
+                }
             }
         }
 
@@ -209,64 +221,86 @@ fun LookScreen(
             }
         }
 
+        // Behaviour: how long it stays and what it keeps.
         item {
             val w = settings.whenToShow
-            GlassCard(title = "When to show") {
-                GlassToggleRow("Not for the app I'm in", w.hideInForegroundApp, { v -> onWhenToShow { it.copy(hideInForegroundApp = v) } })
-                GlassToggleRow("Hide in full screen", w.hideInFullscreen, { v -> onWhenToShow { it.copy(hideInFullscreen = v) } })
-                GlassToggleRow("Hide in landscape", w.hideInLandscape, { v -> onWhenToShow { it.copy(hideInLandscape = v) } })
-                GlassToggleRow("Hide with the shade open", w.hideWhenShadeOpen, { v -> onWhenToShow { it.copy(hideWhenShadeOpen = v) } })
-                GlassToggleRow("Show on the lockscreen", w.showOnLockscreen, { v -> onWhenToShow { it.copy(showOnLockscreen = v) } })
-                GlassToggleRow(
-                    "Keep missed notifications",
-                    w.keepMissed,
-                    { v -> onWhenToShow { it.copy(keepMissed = v) } },
-                    subtitle = "Unopened ones stay as a small pile; tap it to catch up",
-                )
-                GlassToggleRow(
-                    "Stack each app",
-                    w.stackByApp,
-                    { v -> onWhenToShow { it.copy(stackByApp = v) } },
-                    subtitle = "One app's notifications share a slot; swipe to page through",
-                )
-                RowDivider(start = Space.rowPadding)
+            GlassCard(title = "Behaviour") {
                 GlassSliderRow(
-                    "Stay for",
+                    "Stay open for",
                     settings.autoHideSeconds.toFloat(),
                     3f..12f,
                     { "${it.roundToInt()} s" },
                     { onAutoHide(it.roundToInt()) },
                     steps = 8,
                 )
+                GlassToggleRow("Show on the lock screen", w.showOnLockscreen, { v -> onWhenToShow { it.copy(showOnLockscreen = v) } })
+                GlassToggleRow(
+                    "Keep missed notifications",
+                    w.keepMissed,
+                    { v -> onWhenToShow { it.copy(keepMissed = v) } },
+                    subtitle = "Unopened ones wait in a small pile",
+                )
+                GlassToggleRow(
+                    "Stack each app",
+                    w.stackByApp,
+                    { v -> onWhenToShow { it.copy(stackByApp = v) } },
+                    subtitle = "Swipe up or down on the island to read them",
+                )
             }
         }
 
+        // When it steps aside.
+        item {
+            val w = settings.whenToShow
+            GlassCard(title = "Hide the island") {
+                GlassToggleRow("In the app it's about", w.hideInForegroundApp, { v -> onWhenToShow { it.copy(hideInForegroundApp = v) } })
+                GlassToggleRow("In full screen", w.hideInFullscreen, { v -> onWhenToShow { it.copy(hideInFullscreen = v) } })
+                GlassToggleRow("In landscape", w.hideInLandscape, { v -> onWhenToShow { it.copy(hideInLandscape = v) } })
+                GlassToggleRow("With the notification panel open", w.hideWhenShadeOpen, { v -> onWhenToShow { it.copy(hideWhenShadeOpen = v) } })
+            }
+        }
+
+        // Advanced: the gesture table, folded away until asked for.
         item {
             val g = settings.gestures
             GlassCard(
-                title = "Gestures",
-                action = if (g != GestureMap()) {
+                title = "Advanced",
+                action = if (showGestures && g != GestureMap()) {
                     { TextButton(onClick = { onGestures { GestureMap() } }) { Text("Defaults") } }
                 } else {
                     null
                 },
             ) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = Space.rowPadding, vertical = Space.xs)) {
-                    Spacer(Modifier.weight(1f))
-                    ColumnHeader("Compact")
-                    Spacer(Modifier.width(Space.s))
-                    ColumnHeader("Expanded")
+                GlassRow(
+                    "Gestures",
+                    subtitle = if (showGestures) "What tap, swipe and long press do" else "Tap to customise",
+                    icon = Icons.Rounded.TouchApp,
+                    onClick = { showGestures = !showGestures },
+                ) {
+                    Icon(
+                        if (showGestures) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                        null,
+                        tint = glass.contentSecondary,
+                    )
                 }
-                GestureRow("Tap", g.compactTap, g.expandedTap,
-                    { v -> onGestures { it.copy(compactTap = v) } }, { v -> onGestures { it.copy(expandedTap = v) } })
-                GestureRow("Swipe down", g.compactSwipeDown, g.expandedSwipeDown,
-                    { v -> onGestures { it.copy(compactSwipeDown = v) } }, { v -> onGestures { it.copy(expandedSwipeDown = v) } })
-                GestureRow("Swipe up", g.compactSwipeUp, g.expandedSwipeUp,
-                    { v -> onGestures { it.copy(compactSwipeUp = v) } }, { v -> onGestures { it.copy(expandedSwipeUp = v) } })
-                GestureRow("Sideways", g.compactSwipeSide, g.expandedSwipeSide,
-                    { v -> onGestures { it.copy(compactSwipeSide = v) } }, { v -> onGestures { it.copy(expandedSwipeSide = v) } })
-                GestureRow("Long press", g.compactLongPress, g.expandedLongPress,
-                    { v -> onGestures { it.copy(compactLongPress = v) } }, { v -> onGestures { it.copy(expandedLongPress = v) } })
+                if (showGestures) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = Space.rowPadding, vertical = Space.xs)) {
+                        Spacer(Modifier.weight(1f))
+                        ColumnHeader("Small")
+                        Spacer(Modifier.width(Space.s))
+                        ColumnHeader("Open")
+                    }
+                    GestureRow("Tap", g.compactTap, g.expandedTap,
+                        { v -> onGestures { it.copy(compactTap = v) } }, { v -> onGestures { it.copy(expandedTap = v) } })
+                    GestureRow("Swipe down", g.compactSwipeDown, g.expandedSwipeDown,
+                        { v -> onGestures { it.copy(compactSwipeDown = v) } }, { v -> onGestures { it.copy(expandedSwipeDown = v) } })
+                    GestureRow("Swipe up", g.compactSwipeUp, g.expandedSwipeUp,
+                        { v -> onGestures { it.copy(compactSwipeUp = v) } }, { v -> onGestures { it.copy(expandedSwipeUp = v) } })
+                    GestureRow("Sideways", g.compactSwipeSide, g.expandedSwipeSide,
+                        { v -> onGestures { it.copy(compactSwipeSide = v) } }, { v -> onGestures { it.copy(expandedSwipeSide = v) } })
+                    GestureRow("Long press", g.compactLongPress, g.expandedLongPress,
+                        { v -> onGestures { it.copy(compactLongPress = v) } }, { v -> onGestures { it.copy(expandedLongPress = v) } })
+                }
             }
         }
     }

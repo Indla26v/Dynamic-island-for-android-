@@ -579,6 +579,10 @@ internal fun systemIcon(event: SystemEvent): ImageVector = when (event) {
     SystemEvent.LINK_OFF -> Icons.Rounded.LinkOff
 }
 
+/** As [systemColor], with the battery's own level: low battery is orange, red at 10% or below. */
+internal fun systemColor(system: dev.indla.island.model.LiveContent.System, accent: Color): Color =
+    if (system.event == SystemEvent.BATTERY_LOW && (system.level ?: 0) > 10) TimerOrange else systemColor(system.event, accent)
+
 internal fun systemColor(event: SystemEvent, accent: Color): Color = when (event) {
     SystemEvent.CHARGING, SystemEvent.SAVER_OFF -> CallGreen
     SystemEvent.BATTERY_LOW, SystemEvent.RINGER_SILENT -> DeclineRed

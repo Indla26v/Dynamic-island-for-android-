@@ -38,7 +38,7 @@ class IslandEngineTest {
     private class Harness(scope: TestScope) {
         // Stacking and the missed pile have their own tests; the rest see one item per post.
         val settings = MutableStateFlow(
-            IslandSettings(autoHideSeconds = 5, whenToShow = WhenToShow(keepMissed = false, stackByApp = false)),
+            IslandSettings(autoHideSeconds = 5, whenToShow = WhenToShow(keepMissed = false, stackByApp = false, hideWhenShadeOpen = true)),
         )
         val rules = MutableStateFlow<Map<String, AppRule>>(emptyMap())
         val effects = RecordingEffects()
@@ -149,6 +149,16 @@ class IslandEngineTest {
     }
 
     @Test
+    fun byDefault_staysOnTopOfTheOpenPanel() = test { h ->
+        h.settings.value = h.settings.value.copy(whenToShow = h.settings.value.whenToShow.copy(hideWhenShadeOpen = false))
+        runCurrent()
+        h.engine.onPosted(Fixtures.whatsAppDirect())
+        h.engine.updateEnvironment(Environment(shadeOpen = true))
+        assertTrue("pulling the panel down keeps the island", h.state.visible)
+        assertTrue(WhenToShow().hideWhenShadeOpen.not())
+    }
+
+    @Test
     fun lockscreen_hidesContentPerApp() = test { h ->
         h.rules.value = mapOf("com.whatsapp" to AppRule("com.whatsapp", show = true, hideContentOnLock = true))
         runCurrent()
@@ -175,6 +185,20 @@ class IslandEngineTest {
         h.engine.onGesture(IslandGesture.TAP) // expanded tap opens the chat
         assertEquals(listOf("open:${Fixtures.whatsAppDirect().key}"), h.effects.calls)
         assertEquals(IslandMode.REST, h.state.mode)
+    }
+
+    @Test
+    fun swipeDownOnOpenMessage_readsMore() = test { h ->
+        h.engine.onPosted(Fixtures.whatsAppDirect())
+        h.engine.onGesture(IslandGesture.SWIPE_DOWN)
+        assertEquals(IslandMode.EXPANDED, h.state.mode)
+        assertFalse(h.state.readMore)
+        h.engine.onGesture(IslandGesture.SWIPE_DOWN)
+        assertEquals(IslandMode.EXPANDED, h.state.mode)
+        assertTrue(h.state.readMore)
+        h.engine.onGesture(IslandGesture.SWIPE_UP)
+        assertEquals(IslandMode.COMPACT, h.state.mode)
+        assertFalse(h.state.readMore)
     }
 
     @Test

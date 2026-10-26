@@ -24,7 +24,7 @@ class BaselineProfileGenerator {
     @Test
     fun generate() = rule.collect(packageName = TARGET, includeInStartupProfile = true) {
         prepareIsland()
-        for (tab in listOf("Apps", "Look & feel", "Home")) {
+        for (tab in listOf("Apps", "Look", "Home")) {
             device.findObject(By.desc(tab))?.click() ?: device.findObject(By.text(tab))?.click()
             device.wait(Until.hasObject(By.text(tab)), 2_000)
             device.swipe(device.displayWidth / 2, device.displayHeight * 3 / 4, device.displayWidth / 2, device.displayHeight / 4, 20)

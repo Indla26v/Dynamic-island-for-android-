@@ -69,8 +69,8 @@ class NotificationParserTest {
     fun unreadCount_resetsAfterUsersOwnReply() {
         val item = show(Fixtures.telegramAfterMyReply())
         assertEquals("Sam", item.glance)
-        assertEquals(listOf("two", "ok", "three"), item.lines.map { it.text })
-        assertEquals("You", item.lines[1].sender)
+        assertEquals(listOf("one", "two", "ok", "three"), item.lines.map { it.text })
+        assertEquals("You", item.lines[2].sender)
     }
 
     @Test

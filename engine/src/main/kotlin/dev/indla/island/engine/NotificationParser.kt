@@ -444,7 +444,8 @@ class NotificationParser(
     }
 
     companion object {
-        const val MAX_LINES = 3
+        /** Kept for reading more (swipe down on the open card); the card shows the last three. */
+        const val MAX_LINES = 8
         const val MAX_ACTIONS = 3
         const val HIDDEN_BY_ANDROID = "Hidden by Android"
         const val YOU = "You"

@@ -161,7 +161,7 @@ private fun RowScope.CompactLeading(item: IslandItem, size: Dp, accent: Color) {
         is LiveContent.System -> if (live.event == SystemEvent.HEADPHONES_CONNECTED) {
             Icon(headphonesIcon(live), null, tint = Color.White, modifier = Modifier.size(size * 0.85f))
         } else {
-            SystemGlyph(live.event, systemColor(live.event, accent), size * 0.85f, live.level)
+            SystemGlyph(live.event, systemColor(live, accent), size * 0.85f, live.level)
         }
         is LiveContent.Progress -> if (live.navigation) TurnArrow(item, size) else ItemIcon(item, size)
         is LiveContent.Timer -> if (live.recording) {
@@ -239,8 +239,10 @@ private fun RowScope.CompactTrailing(item: IslandItem, accent: Color, minimal: B
             GlanceText(live.display(now), if (live.recording) RecordRed else TimerOrange)
         }
         is LiveContent.System -> {
-            val color = systemColor(live.event, accent)
-            if (live.event == SystemEvent.CLIPBOARD) {
+            val color = systemColor(live, accent)
+            if (live.event == SystemEvent.BATTERY_LOW) {
+                GlanceText("${live.level ?: 0}%", color)
+            } else if (live.event == SystemEvent.CLIPBOARD) {
                 GlanceText("Copied", color)
             } else if (live.event == SystemEvent.UNLOCKED || live.event == SystemEvent.AUTH_FAILED) {
                 GlanceText(if (live.event == SystemEvent.UNLOCKED) "Unlocked" else "Retry", color)
@@ -344,7 +346,7 @@ private fun ExpandedContent(
                 item.live is LiveContent.Progress -> ProgressBody(item, item.live as LiveContent.Progress, accent, registry)
                 item.live is LiveContent.System -> SystemBody(item, item.live as LiveContent.System, accent, registry)
                 item.live is LiveContent.Timer -> TimerBody(item, item.live as LiveContent.Timer, registry)
-                else -> NotificationBody(item, state.replyOpen, registry, drawReplyHint)
+                else -> NotificationBody(item, state.replyOpen, state.readMore, registry, drawReplyHint)
             }
         }
         val stack = item.stack
@@ -426,9 +428,17 @@ private fun Band(item: IslandItem, layout: IslandLayout, rect: IslandRect, pad: 
 
 /** Banner-style notification: avatar with app badge, title, last lines, actions. */
 @Composable
-private fun NotificationBody(item: IslandItem, replyOpen: Boolean, registry: HitRegistry?, drawReplyHint: Boolean) {
-    val lines = if (replyOpen) item.lines.takeLast(1) else item.lines.takeLast(3)
-    Row(Modifier.fillMaxWidth().height(maxOf(IslandLayout.AVATAR, IslandLayout.TEXT_ROW * (1 + lines.size)).dp)) {
+private fun NotificationBody(item: IslandItem, replyOpen: Boolean, readMore: Boolean, registry: HitRegistry?, drawReplyHint: Boolean) {
+    val lines = when {
+        replyOpen -> item.lines.takeLast(1)
+        readMore -> item.lines.takeLast(IslandLayout.READ_LINES)
+        else -> item.lines.takeLast(3)
+    }
+    val rows = if (readMore) IslandLayout.readingRows(item) else lines.size
+    // Several people talking (a group, or chats bundled by the app): each gets a colour, and a
+    // name shows only when the sender changes, so it reads like the chat itself.
+    val manyPeople = !item.isHidden && lines.mapNotNull { it.sender }.distinct().size > 1
+    Row(Modifier.fillMaxWidth().height(maxOf(IslandLayout.AVATAR, IslandLayout.TEXT_ROW * (1 + rows)).dp)) {
         AvatarWithBadge(item, IslandLayout.AVATAR.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -441,21 +451,29 @@ private fun NotificationBody(item: IslandItem, replyOpen: Boolean, registry: Hit
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.height(IslandLayout.TEXT_ROW.dp),
             )
-            lines.forEach { line ->
-                Row(Modifier.height(IslandLayout.TEXT_ROW.dp), verticalAlignment = Alignment.CenterVertically) {
+            lines.forEachIndexed { i, line ->
+                val lineRows = if (readMore) IslandLayout.rowsFor(line) else 1
+                Row(Modifier.height((IslandLayout.TEXT_ROW * lineRows).dp), verticalAlignment = if (lineRows > 1) Alignment.Top else Alignment.CenterVertically) {
                     if (item.isHidden) {
                         Icon(Icons.Rounded.Lock, null, tint = Secondary, modifier = Modifier.size(13.dp))
                         Spacer(Modifier.width(4.dp))
                     }
-                    if (line.sender != null && !item.isHidden && item.lines.any { it.sender != line.sender } ) {
-                        Text("${line.sender}  ", color = Secondary, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                    }
+                    val sender = line.sender?.takeIf { manyPeople && (i == 0 || lines[i - 1].sender != it) }
                     Text(
-                        line.text,
+                        androidx.compose.ui.text.buildAnnotatedString {
+                            if (sender != null) {
+                                pushStyle(androidx.compose.ui.text.SpanStyle(color = senderColor(sender), fontWeight = FontWeight.SemiBold))
+                                append(sender)
+                                pop()
+                                append("  ")
+                            }
+                            append(line.text)
+                        },
                         color = if (item.isHidden) Secondary else Color.White.copy(alpha = 0.92f),
                         fontSize = 14.sp,
+                        lineHeight = 19.sp,
                         fontStyle = if (item.isHidden) FontStyle.Italic else FontStyle.Normal,
-                        maxLines = 1,
+                        maxLines = lineRows,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
@@ -494,6 +512,14 @@ private fun NotificationBody(item: IslandItem, replyOpen: Boolean, registry: Hit
         }
     }
 }
+
+/** A stable, readable colour per person, so a group chat reads like the chat app. */
+private fun senderColor(name: String): Color = SenderColors[(name.hashCode() and Int.MAX_VALUE) % SenderColors.size]
+
+private val SenderColors = listOf(
+    Color(0xFF7CC4FF), Color(0xFFFF9F8A), Color(0xFF8BE3A0), Color(0xFFFFD27A),
+    Color(0xFFC9A6FF), Color(0xFF6FE0D8), Color(0xFFFF9FCF), Color(0xFFB8D86B),
+)
 
 /** Avatar, caller and round red/green buttons, like an incoming call. */
 @Composable
@@ -827,7 +853,7 @@ private fun SystemBody(item: IslandItem, system: LiveContent.System, accent: Col
         HeadphonesBody(system)
         return
     }
-    val color = systemColor(system.event, accent)
+    val color = systemColor(system, accent)
     if (hasScene(system.event)) {
         // A little story across the card: words on the left, the scene on the right.
         Row(Modifier.fillMaxWidth().height(IslandLayout.SYSTEM_ROW.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -882,7 +908,7 @@ private fun SlimGlance(item: IslandItem, system: LiveContent.System, layout: Isl
     val gap = layout.cameraGap
     val leftWidth = (camera - gap / 2 - pad).coerceAtLeast(0f)
     val rightWidth = (rect.width - camera - gap / 2 - pad).coerceAtLeast(0f)
-    val color = systemColor(system.event, accent)
+    val color = systemColor(system, accent)
     val headphones = system.event == SystemEvent.HEADPHONES_CONNECTED
     Row(Modifier.fillMaxSize().padding(horizontal = pad.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.width(leftWidth.dp)) {

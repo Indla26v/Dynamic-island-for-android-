@@ -19,25 +19,62 @@ internal class PowerSignal(context: Context, emit: Emit) : BroadcastSignal(conte
     private val battery = context.getSystemService(BatteryManager::class.java)
     private val power = context.getSystemService(PowerManager::class.java)
 
+    /** Low-battery warnings already given since the phone was last charging. */
+    private val warned = HashSet<Int>()
+    private var lastLevel: Int? = null
+
+    // Not ACTION_BATTERY_LOW: some skins (vivo) repeat it at every percent below their threshold.
+    // The level itself says when 30% and 10% are crossed, once each.
     override val actions = listOf(
         Intent.ACTION_POWER_CONNECTED,
         Intent.ACTION_POWER_DISCONNECTED,
-        Intent.ACTION_BATTERY_LOW,
+        Intent.ACTION_BATTERY_CHANGED,
         PowerManager.ACTION_POWER_SAVE_MODE_CHANGED,
     )
 
     override fun onBroadcast(intent: Intent, initial: Boolean) {
+        if (intent.action == Intent.ACTION_BATTERY_CHANGED) {
+            onLevel(intent, initial)
+            return
+        }
         if (initial) return
         val level = battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY).coerceIn(0, 100)
         when (intent.action) {
             Intent.ACTION_POWER_CONNECTED -> emit(LiveContent.System(SystemEvent.CHARGING, level, "$level%"))
             Intent.ACTION_POWER_DISCONNECTED -> emit(LiveContent.System(SystemEvent.UNPLUGGED, level, "$level%"))
-            Intent.ACTION_BATTERY_LOW -> emit(LiveContent.System(SystemEvent.BATTERY_LOW, level, "$level%"))
             PowerManager.ACTION_POWER_SAVE_MODE_CHANGED -> {
                 val on = power?.isPowerSaveMode == true
                 emit(LiveContent.System(if (on) SystemEvent.SAVER_ON else SystemEvent.SAVER_OFF, level, if (on) "On · $level%" else "Off"))
             }
         }
+    }
+
+    /** Warns once on the way down through 30% (orange) and once through 10% (red). */
+    private fun onLevel(intent: Intent, initial: Boolean) {
+        val raw = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+        val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
+        if (raw < 0) return
+        val level = (raw * 100 / scale).coerceIn(0, 100)
+        val charging = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
+        val before = lastLevel
+        lastLevel = level
+        if (charging) {
+            warned.clear()
+            return
+        }
+        // At start, thresholds already passed count as given: no warning for where it already is.
+        if (initial || before == null) {
+            warned += LOW_LEVELS.filter { level <= it }
+            return
+        }
+        val crossed = LOW_LEVELS.filter { level <= it && it !in warned }
+        if (crossed.isEmpty() || level >= before) return
+        warned += crossed
+        emit(LiveContent.System(SystemEvent.BATTERY_LOW, level, "$level%"))
+    }
+
+    private companion object {
+        val LOW_LEVELS = listOf(30, 10)
     }
 }
 

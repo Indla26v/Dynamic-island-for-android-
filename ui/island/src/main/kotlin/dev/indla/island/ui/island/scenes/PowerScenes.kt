@@ -86,7 +86,7 @@ internal fun DrainScene(args: SceneArgs, modifier: Modifier) {
         val by = (size.height - bh) / 2
         val drain = p.segment(0f, 0.6f)
         val blink = if (p < 1f) 0.45f + 0.55f * ((kotlin.math.cos(p * 6 * PI).toFloat() + 1f) / 2f) else 1f
-        battery(bx, by, bw, bh, (0.45f - (0.45f - level / 100f) * drain).coerceAtLeast(0.02f), DeclineRed, outlineAlpha = blink)
+        battery(bx, by, bw, bh, (0.45f - (0.45f - level / 100f) * drain).coerceAtLeast(0.02f), args.color, outlineAlpha = blink)
     }
 }
 

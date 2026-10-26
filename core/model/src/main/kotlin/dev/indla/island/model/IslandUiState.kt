@@ -16,6 +16,8 @@ data class IslandUiState(
     val positionEditing: Boolean = false,
     /** The last change was a page turn in a stack: 1 swiped up, -1 swiped down, 0 not a page turn. */
     val pageTurn: Int = 0,
+    /** The open message was swiped down: show all its lines, wrapped, for reading. */
+    val readMore: Boolean = false,
     val appearance: IslandAppearance = IslandAppearance(),
 ) {
     val current: IslandItem? get() = items.getOrNull(currentIndex)

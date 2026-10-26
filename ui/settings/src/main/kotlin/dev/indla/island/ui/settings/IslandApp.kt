@@ -42,7 +42,7 @@ import dev.indla.island.ui.settings.theme.IslandTheme
 private val Tabs = listOf(
     TabItem("Home", Icons.Rounded.Home),
     TabItem("Apps", Icons.Rounded.Apps),
-    TabItem("Look & feel", Icons.Rounded.Palette),
+    TabItem("Look", Icons.Rounded.Palette),
 )
 
 /** Three tabs replace a five-entry menu; every tab opens with a live island preview. */
@@ -141,8 +141,6 @@ fun IslandApp(showDebug: Boolean) {
                                 apps = apps,
                                 ruleFor = { pkg -> rules[pkg] ?: vm.ruleFor(pkg) },
                                 onSave = { vm.saveRule(it) },
-                                live = s.live,
-                                onLive = { vm.updateLive(it) },
                                 onSetAll = { vm.setAllApps(it) },
                             )
                             else -> LookScreen(
