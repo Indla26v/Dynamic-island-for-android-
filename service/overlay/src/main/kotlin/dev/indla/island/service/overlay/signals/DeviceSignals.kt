@@ -164,8 +164,9 @@ internal class TorchSignal(context: Context, private val emit: Emit) : SignalSou
 }
 
 /**
- * A phone switch that lives in a system setting as 0 / 1 (vivo's Monster mode, the hotspot,
- * Eye Protection). One class for all of them: which setting, and which glance on and off.
+ * A phone switch that lives in a system setting (vivo's Monster mode, the hotspot, Eye
+ * Protection). One class for all of them: which setting, which value means on, and which glance
+ * on and off.
  */
 internal class ToggleSettingSignal(
     context: Context,
@@ -174,6 +175,7 @@ internal class ToggleSettingSignal(
     private val table: Table,
     private val onEvent: SystemEvent,
     private val offEvent: SystemEvent,
+    private val isOn: (Int) -> Boolean = { it != 0 },
 ) : SettingSignal(context, emit) {
     enum class Table { SYSTEM, GLOBAL, SECURE }
 
@@ -207,14 +209,18 @@ internal class ToggleSettingSignal(
             Table.SYSTEM -> Settings.System.getInt(resolver, name)
             Table.GLOBAL -> Settings.Global.getInt(resolver, name)
             Table.SECURE -> Settings.Secure.getInt(resolver, name)
-        } != 0
+        }.let(isOn)
     }.getOrNull()
 
     companion object {
         private const val TAG = "IslandSignals"
 
+        // vivo keeps its power mode in one number: 5 is Monster, -1 normal, others the savers.
+        // (pemMonsterState only says the phone supports Monster; it never changes.)
         fun monster(context: Context, emit: Emit) =
-            ToggleSettingSignal(context, emit, "pemMonsterState", Table.SYSTEM, SystemEvent.MONSTER_ON, SystemEvent.MONSTER_OFF)
+            ToggleSettingSignal(context, emit, "power_save_type", Table.SYSTEM, SystemEvent.MONSTER_ON, SystemEvent.MONSTER_OFF) { it == MONSTER }
+
+        private const val MONSTER = 5
 
         fun hotspot(context: Context, emit: Emit) =
             ToggleSettingSignal(context, emit, "soft_ap_on", Table.GLOBAL, SystemEvent.HOTSPOT_ON, SystemEvent.HOTSPOT_OFF)
