@@ -121,6 +121,9 @@ class IslandAccessibilityService : AccessibilityService() {
     private val controls by lazy { ControlPress(this, scope) }
 
     override fun onServiceConnected() {
+        // Each start and stop once in logcat: when the island vanishes, this says whether
+        // Android unbound the service or only the island hid.
+        Log.i(TAG, "service connected")
         windowManager = getSystemService(WindowManager::class.java)
         keyguard = getSystemService(KeyguardManager::class.java)
         imePackages = getSystemService(InputMethodManager::class.java)
@@ -256,6 +259,7 @@ class IslandAccessibilityService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        Log.i(TAG, "service unbound")
         tearDown()
         return super.onUnbind(intent)
     }

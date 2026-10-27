@@ -77,7 +77,11 @@ object OverlayKeeper {
      * there. Returns true when it did.
      */
     fun restoreIfDropped(context: Context): Boolean {
-        if (!wasOn(context) || !autoRestore(context) || !canRestore(context) || isEnabled(context)) return false
+        if (!wasOn(context) || isEnabled(context)) return false
+        if (!autoRestore(context) || !canRestore(context)) {
+            Log.i(TAG, "accessibility service was dropped; can't restore (${if (canRestore(context)) "auto-restore off" else "no WRITE_SECURE_SETTINGS grant"})")
+            return false
+        }
         return runCatching {
             val resolver = context.contentResolver
             val list = enabledList(context) + component(context).flattenToString()
