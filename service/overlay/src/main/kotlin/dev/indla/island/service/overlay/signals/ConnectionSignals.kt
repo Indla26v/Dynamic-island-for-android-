@@ -52,6 +52,49 @@ internal class WifiSignal(context: Context, emit: Emit) : BroadcastSignal(contex
 }
 
 /**
+ * The Wi-Fi switch itself, from the sticky state broadcast every phone sends whichever screen
+ * flipped it (quick settings, the Settings app, an assistant). [WifiSignal] only hears joining
+ * and leaving a network, which a switch flipped with nothing in range never does.
+ */
+internal class WifiRadioSignal(context: Context, emit: Emit) : BroadcastSignal(context, emit) {
+    private var on: Boolean? = null
+
+    override val actions = listOf(WifiManager.WIFI_STATE_CHANGED_ACTION)
+
+    override fun onBroadcast(intent: Intent, initial: Boolean) {
+        // Enabling and disabling pass through on the way; only the settled states count.
+        val now = when (intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN)) {
+            WifiManager.WIFI_STATE_ENABLED -> true
+            WifiManager.WIFI_STATE_DISABLED -> false
+            else -> return
+        }
+        val before = on
+        on = now
+        if (initial || before == null || before == now) return
+        emit(LiveContent.System(if (now) SystemEvent.WIFI_ON else SystemEvent.WIFI_OFF, null, onOff(now)))
+    }
+}
+
+/**
+ * The Bluetooth switch, from the adapter's state broadcast (it needs no runtime permission; the
+ * install-time BLUETOOTH permission covers Android 11 and older). Settled states only: turning on
+ * and turning off pass through first, so every on or off is a change.
+ */
+internal class BluetoothSignal(context: Context, emit: Emit) : BroadcastSignal(context, emit) {
+    override val actions = listOf(BluetoothAdapter.ACTION_STATE_CHANGED)
+
+    override fun onBroadcast(intent: Intent, initial: Boolean) {
+        if (initial) return
+        val on = when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)) {
+            BluetoothAdapter.STATE_ON -> true
+            BluetoothAdapter.STATE_OFF -> false
+            else -> return
+        }
+        emit(LiveContent.System(if (on) SystemEvent.BLUETOOTH_ON else SystemEvent.BLUETOOTH_OFF, null, onOff(on)))
+    }
+}
+
+/**
  * Headphones connecting and disconnecting, from the audio device callback (no permission: the
  * audio device's product name says "Buds connected"). With Nearby devices allowed, a Bluetooth
  * pair also shows its own name and battery, which often arrives a moment later and updates the

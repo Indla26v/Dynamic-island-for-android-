@@ -211,6 +211,9 @@ enum class SystemEvent {
     LIGHT_MODE,
     WIFI_CONNECTED,
     WIFI_DISCONNECTED,
+    /** The Wi-Fi radio itself, whether or not a network joins. */
+    WIFI_ON,
+    WIFI_OFF,
     CLIPBOARD,
     LOCATION_ON,
     LOCATION_OFF,
@@ -232,6 +235,8 @@ enum class SystemEvent {
     /** Microsoft Link to Windows connected to a PC. */
     LINK_ON,
     LINK_OFF,
+    BLUETOOTH_ON,
+    BLUETOOTH_OFF,
 }
 
 /** A media session as the listener sees it; the engine turns it into a MEDIA item. */

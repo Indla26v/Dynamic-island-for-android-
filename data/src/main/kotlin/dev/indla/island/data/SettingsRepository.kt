@@ -127,6 +127,7 @@ class SettingsRepository @Inject constructor(
                 hotspot = this[Keys.live("hotspot")] ?: d.live.hotspot,
                 eyeProtection = this[Keys.live("eye_protection")] ?: d.live.eyeProtection,
                 linkToWindows = this[Keys.live("link_to_windows")] ?: d.live.linkToWindows,
+                bluetooth = this[Keys.live("bluetooth")] ?: d.live.bluetooth,
             ),
             onboardingDone = this[Keys.onboardingDone] ?: d.onboardingDone,
             accessibilityDisclosureAccepted = this[Keys.disclosure] ?: d.accessibilityDisclosureAccepted,
@@ -167,6 +168,7 @@ class SettingsRepository @Inject constructor(
         this[Keys.live("hotspot")] = s.live.hotspot
         this[Keys.live("eye_protection")] = s.live.eyeProtection
         this[Keys.live("link_to_windows")] = s.live.linkToWindows
+        this[Keys.live("bluetooth")] = s.live.bluetooth
         this[Keys.hideForeground] = s.whenToShow.hideInForegroundApp
         this[Keys.hideFullscreen] = s.whenToShow.hideInFullscreen
         this[Keys.hideLandscape] = s.whenToShow.hideInLandscape

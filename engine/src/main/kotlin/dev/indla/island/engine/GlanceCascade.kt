@@ -5,6 +5,8 @@ import dev.indla.island.model.SystemEvent.AIRPLANE_OFF
 import dev.indla.island.model.SystemEvent.AIRPLANE_ON
 import dev.indla.island.model.SystemEvent.BEDTIME_OFF
 import dev.indla.island.model.SystemEvent.BEDTIME_ON
+import dev.indla.island.model.SystemEvent.BLUETOOTH_OFF
+import dev.indla.island.model.SystemEvent.BLUETOOTH_ON
 import dev.indla.island.model.SystemEvent.CHARGING
 import dev.indla.island.model.SystemEvent.DARK_MODE
 import dev.indla.island.model.SystemEvent.DATA_OFF
@@ -29,6 +31,8 @@ import dev.indla.island.model.SystemEvent.SAVER_OFF
 import dev.indla.island.model.SystemEvent.SAVER_ON
 import dev.indla.island.model.SystemEvent.WIFI_CONNECTED
 import dev.indla.island.model.SystemEvent.WIFI_DISCONNECTED
+import dev.indla.island.model.SystemEvent.WIFI_OFF
+import dev.indla.island.model.SystemEvent.WIFI_ON
 
 /**
  * One switch often flips others: bedtime turns on Do Not Disturb, silences the ringer and warms
@@ -43,15 +47,19 @@ internal object GlanceCascade {
     private val consequences: Map<SystemEvent, Set<SystemEvent>> = mapOf(
         BEDTIME_ON to setOf(DND_ON, RINGER_SILENT, RINGER_VIBRATE, EYE_ON, DARK_MODE, LIGHT_MODE),
         BEDTIME_OFF to setOf(DND_OFF, RINGER_NORMAL, RINGER_VIBRATE, EYE_OFF, LIGHT_MODE, DARK_MODE),
-        AIRPLANE_ON to setOf(WIFI_DISCONNECTED, DATA_OFF, HEADPHONES_DISCONNECTED, HOTSPOT_OFF, LINK_OFF),
-        AIRPLANE_OFF to setOf(WIFI_CONNECTED, DATA_ON, HEADPHONES_CONNECTED, LINK_ON),
+        AIRPLANE_ON to setOf(WIFI_OFF, WIFI_DISCONNECTED, BLUETOOTH_OFF, DATA_OFF, HEADPHONES_DISCONNECTED, HOTSPOT_OFF, LINK_OFF),
+        AIRPLANE_OFF to setOf(WIFI_ON, WIFI_CONNECTED, BLUETOOTH_ON, DATA_ON, HEADPHONES_CONNECTED, LINK_ON),
         SAVER_ON to setOf(DARK_MODE, MONSTER_OFF),
         SAVER_OFF to setOf(LIGHT_MODE),
         DND_ON to setOf(RINGER_SILENT, RINGER_VIBRATE),
         DND_OFF to setOf(RINGER_NORMAL, RINGER_VIBRATE),
         CHARGING to setOf(SAVER_OFF),
-        HOTSPOT_ON to setOf(WIFI_DISCONNECTED),
-        HOTSPOT_OFF to setOf(WIFI_CONNECTED),
+        HOTSPOT_ON to setOf(WIFI_OFF, WIFI_DISCONNECTED),
+        HOTSPOT_OFF to setOf(WIFI_ON, WIFI_CONNECTED),
+        // Turning Wi-Fi off drops its network; "Off" says it all. Turning it on is no cause: the
+        // network joining a moment later replaces "On" with its name.
+        WIFI_OFF to setOf(WIFI_DISCONNECTED),
+        BLUETOOTH_OFF to setOf(HEADPHONES_DISCONNECTED),
         MONSTER_ON to setOf(SAVER_OFF),
     )
 

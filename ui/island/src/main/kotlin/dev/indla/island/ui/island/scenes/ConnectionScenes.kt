@@ -200,6 +200,59 @@ internal fun WifiScene(on: Boolean, modifier: Modifier) {
     }
 }
 
+/**
+ * Bluetooth on: the rune draws itself stroke by stroke, then two pairs of signal arcs ripple out
+ * either side. Off: the arcs fold in, the rune greys and a slash draws through it.
+ */
+@Composable
+internal fun BluetoothScene(on: Boolean, modifier: Modifier) {
+    val p = rememberTimeline(1_800)
+    val rune = if (on) p.segment(0f, 0.45f) else 1f
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val c = Offset(size.width / 2, size.height / 2)
+            val h = size.height * 0.36f
+            val w = h * 0.5f
+            val color = if (on) WifiBlue else Secondary
+            // The rune as one path: up the spine, out to the top tip, across, down to the bottom tip.
+            val points = listOf(
+                Offset(c.x - w, c.y - h * 0.5f),
+                Offset(c.x + w, c.y + h * 0.5f),
+                Offset(c.x, c.y + h),
+                Offset(c.x, c.y - h),
+                Offset(c.x + w, c.y - h * 0.5f),
+                Offset(c.x - w, c.y + h * 0.5f),
+            )
+            val drawn = rune * (points.size - 1)
+            val path = Path().apply {
+                moveTo(points[0].x, points[0].y)
+                for (i in 1 until points.size) {
+                    val part = (drawn - (i - 1)).coerceIn(0f, 1f)
+                    if (part <= 0f) break
+                    val a = points[i - 1]
+                    val b = points[i]
+                    lineTo(a.x + (b.x - a.x) * part, a.y + (b.y - a.y) * part)
+                }
+            }
+            drawPath(path, color, style = Stroke(2.4.dp.toPx(), cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+            for (i in 0 until 2) {
+                val reach = if (on) p.segment(0.45f + i * 0.15f, 0.75f + i * 0.15f) else 1f - p.segment(i * 0.1f, 0.4f + i * 0.1f)
+                if (reach <= 0.01f) continue
+                val r = h * (1.5f + 0.7f * i)
+                val alpha = 0.7f * reach * (1f - 0.3f * i)
+                for (start in listOf(-35f, 145f)) {
+                    drawArc(WifiBlue.copy(alpha = alpha), start, 70f, false, c - Offset(r, r), Size(2 * r, 2 * r), style = Stroke(1.8.dp.toPx(), cap = StrokeCap.Round))
+                }
+            }
+            if (!on) {
+                val slash = p.segment(0.45f, 0.9f)
+                val from = c + Offset(-h * 0.9f, -h * 0.9f)
+                drawLine(Secondary, from, from + Offset(h * 1.8f, h * 1.8f) * slash, 2.dp.toPx(), StrokeCap.Round)
+            }
+        }
+    }
+}
+
 private fun DrawScope.arc(center: Offset, r: Float, alpha: Float, color: Color) {
     if (alpha <= 0f) return
     drawArc(color.copy(alpha = alpha), 225f, 90f, false, center - Offset(r, r), Size(2 * r, 2 * r), style = Stroke(r * 0.28f, cap = StrokeCap.Round))

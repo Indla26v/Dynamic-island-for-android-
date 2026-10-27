@@ -16,6 +16,8 @@ import androidx.compose.material.icons.rounded.BatteryAlert
 import androidx.compose.material.icons.rounded.BatteryStd
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.BedtimeOff
+import androidx.compose.material.icons.rounded.Bluetooth
+import androidx.compose.material.icons.rounded.BluetoothDisabled
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ContentPaste
@@ -41,6 +43,7 @@ import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material.icons.rounded.WifiTetheringOff
 import androidx.compose.material3.Icon
@@ -106,8 +109,8 @@ internal fun SystemGlyph(event: SystemEvent, color: Color, size: Dp, level: Int?
         }
         SystemEvent.DARK_MODE -> Horizon(color, size, night = true)
         SystemEvent.LIGHT_MODE -> Horizon(color, size, night = false)
-        SystemEvent.WIFI_CONNECTED -> WifiArcs(color, size, connected = true)
-        SystemEvent.WIFI_DISCONNECTED -> WifiArcs(color, size, connected = false)
+        SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_ON -> WifiArcs(color, size, connected = true)
+        SystemEvent.WIFI_DISCONNECTED, SystemEvent.WIFI_OFF -> WifiArcs(color, size, connected = false)
         SystemEvent.CLIPBOARD -> Clipboard(color, size)
         SystemEvent.RINGER_SILENT -> SilentBell(color, size)
         SystemEvent.LOCATION_ON -> PinDrop(color, size)
@@ -561,7 +564,10 @@ internal fun systemIcon(event: SystemEvent): ImageVector = when (event) {
     SystemEvent.MONSTER_ON, SystemEvent.MONSTER_OFF -> Icons.Rounded.LocalFireDepartment
     SystemEvent.DARK_MODE -> Icons.Rounded.DarkMode
     SystemEvent.LIGHT_MODE -> Icons.Rounded.LightMode
-    SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_DISCONNECTED -> Icons.Rounded.Wifi
+    SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_DISCONNECTED, SystemEvent.WIFI_ON -> Icons.Rounded.Wifi
+    SystemEvent.WIFI_OFF -> Icons.Rounded.WifiOff
+    SystemEvent.BLUETOOTH_ON -> Icons.Rounded.Bluetooth
+    SystemEvent.BLUETOOTH_OFF -> Icons.Rounded.BluetoothDisabled
     SystemEvent.CLIPBOARD -> Icons.Rounded.ContentPaste
     SystemEvent.LOCATION_ON -> Icons.Rounded.LocationOn
     SystemEvent.LOCATION_OFF -> Icons.Rounded.LocationOff
@@ -591,7 +597,7 @@ internal fun systemColor(event: SystemEvent, accent: Color): Color = when (event
     SystemEvent.SAVER_ON, SystemEvent.LIGHT_MODE -> SaverYellow
     SystemEvent.MONSTER_ON -> MonsterRed
     SystemEvent.DARK_MODE -> NightIndigo
-    SystemEvent.WIFI_CONNECTED -> WifiBlue
+    SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_ON, SystemEvent.BLUETOOTH_ON -> WifiBlue
     SystemEvent.CLIPBOARD -> ClipTeal
     SystemEvent.LOCATION_ON -> WifiBlue
     SystemEvent.DND_ON -> NightIndigo
@@ -601,6 +607,7 @@ internal fun systemColor(event: SystemEvent, accent: Color): Color = when (event
     SystemEvent.HOTSPOT_ON, SystemEvent.LINK_ON -> WifiBlue
     SystemEvent.EYE_ON -> EyeAmber
     SystemEvent.HOTSPOT_OFF, SystemEvent.EYE_OFF, SystemEvent.LINK_OFF -> Secondary
+    SystemEvent.WIFI_OFF, SystemEvent.BLUETOOTH_OFF -> Secondary
     SystemEvent.LOCATION_OFF, SystemEvent.DND_OFF, SystemEvent.BEDTIME_OFF, SystemEvent.DATA_OFF -> Secondary
     SystemEvent.UNPLUGGED, SystemEvent.HEADPHONES_DISCONNECTED, SystemEvent.AIRPLANE_OFF,
     SystemEvent.FLASHLIGHT_OFF, SystemEvent.MONSTER_OFF, SystemEvent.WIFI_DISCONNECTED -> Secondary
@@ -622,7 +629,7 @@ internal fun systemTitle(event: SystemEvent): String = when (event) {
     SystemEvent.MONSTER_ON, SystemEvent.MONSTER_OFF -> "Monster mode"
     SystemEvent.DARK_MODE -> "Dark mode"
     SystemEvent.LIGHT_MODE -> "Light mode"
-    SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_DISCONNECTED -> "Wi-Fi"
+    SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_DISCONNECTED, SystemEvent.WIFI_ON, SystemEvent.WIFI_OFF -> "Wi-Fi"
     SystemEvent.CLIPBOARD -> "Copied"
     SystemEvent.LOCATION_ON, SystemEvent.LOCATION_OFF -> "Location"
     SystemEvent.DND_ON, SystemEvent.DND_OFF -> "Do Not Disturb"
@@ -633,4 +640,5 @@ internal fun systemTitle(event: SystemEvent): String = when (event) {
     SystemEvent.HOTSPOT_ON, SystemEvent.HOTSPOT_OFF -> "Hotspot"
     SystemEvent.EYE_ON, SystemEvent.EYE_OFF -> "Eye protection"
     SystemEvent.LINK_ON, SystemEvent.LINK_OFF -> "Link to Windows"
+    SystemEvent.BLUETOOTH_ON, SystemEvent.BLUETOOTH_OFF -> "Bluetooth"
 }

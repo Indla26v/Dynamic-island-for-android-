@@ -582,6 +582,27 @@ class IslandEngineTest {
     }
 
     @Test
+    fun wifiSwitch_off_replacesTheDisconnect_on_givesWayToTheNetwork() = test { h ->
+        // Turning Wi-Fi off drops the network first, then the radio settles off.
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.WIFI_DISCONNECTED, null, "Disconnected"))
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.WIFI_OFF, null, "Off"))
+        assertEquals(listOf(SystemEvent.WIFI_OFF), h.state.items.map { (it.live as LiveContent.System).event })
+        advanceTimeBy(GlanceCascade.WINDOW_MS + 100); runCurrent()
+        // Turning it on: "On", then the network's name in the same slot.
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.WIFI_ON, null, "On"))
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.WIFI_CONNECTED, null, "Home"))
+        assertEquals(listOf(SystemEvent.WIFI_CONNECTED), h.state.items.map { (it.live as LiveContent.System).event })
+    }
+
+    @Test
+    fun bluetoothOff_hidesTheEarbudsLeaving_andTwoSourcesMakeOneGlance() = test { h ->
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.BLUETOOTH_OFF, null, "Off"))
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.HEADPHONES_DISCONNECTED, null, "Buds"))
+        h.engine.onSystemEvent(LiveContent.System(SystemEvent.BLUETOOTH_OFF, null, "Off"))
+        assertEquals(listOf(SystemEvent.BLUETOOTH_OFF), h.state.items.map { (it.live as LiveContent.System).event })
+    }
+
+    @Test
     fun timerPause_keepsTheCardOpen() = test { h ->
         h.engine.onPosted(Fixtures.clockTimer())
         h.engine.onGesture(IslandGesture.TAP)

@@ -225,8 +225,34 @@ internal class ToggleSettingSignal(
         fun hotspot(context: Context, emit: Emit) =
             ToggleSettingSignal(context, emit, "soft_ap_on", Table.GLOBAL, SystemEvent.HOTSPOT_ON, SystemEvent.HOTSPOT_OFF)
 
-        fun eyeProtection(context: Context, emit: Emit) =
-            ToggleSettingSignal(context, emit, "night_display_activated", Table.SECURE, SystemEvent.EYE_ON, SystemEvent.EYE_OFF)
+        /**
+         * Every skin names its blue light filter differently; a phone has one of these and the
+         * others stay unreadable and silent.
+         */
+        fun eyeProtection(context: Context, emit: Emit) = EYE_SETTINGS.map { (name, table) ->
+            ToggleSettingSignal(context, emit, name, table, SystemEvent.EYE_ON, SystemEvent.EYE_OFF)
+        }
+
+        private val EYE_SETTINGS = listOf(
+            // Android's Night Light: Pixel, vivo, OPPO, realme, Motorola, Nothing.
+            "night_display_activated" to Table.SECURE,
+            // Samsung One UI's Eye comfort shield.
+            "blue_light_filter" to Table.SYSTEM,
+            // Xiaomi, Redmi and POCO's Reading mode.
+            "screen_paper_mode_enabled" to Table.SYSTEM,
+            // OnePlus's Eye comfort.
+            "oem_eyecare_enable" to Table.SYSTEM,
+            // Huawei and Honor's Eye comfort.
+            "eyes_protection_mode" to Table.SYSTEM,
+        )
+
+        /**
+         * The Bluetooth switch as Android saves it (0 off, 1 on, 2 on but held off by airplane
+         * mode): readable without any permission, in case a skin holds the state broadcast back.
+         * It agrees with [BluetoothSignal], so the two make one glance.
+         */
+        fun bluetooth(context: Context, emit: Emit) =
+            ToggleSettingSignal(context, emit, "bluetooth_on", Table.GLOBAL, SystemEvent.BLUETOOTH_ON, SystemEvent.BLUETOOTH_OFF)
     }
 }
 

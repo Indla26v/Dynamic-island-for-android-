@@ -1035,7 +1035,7 @@ class IslandEngine(
             SystemEvent.SAVER_ON, SystemEvent.SAVER_OFF -> "saver"
             SystemEvent.MONSTER_ON, SystemEvent.MONSTER_OFF -> "monster"
             SystemEvent.DARK_MODE, SystemEvent.LIGHT_MODE -> "theme"
-            SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_DISCONNECTED -> "wifi"
+            SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_DISCONNECTED, SystemEvent.WIFI_ON, SystemEvent.WIFI_OFF -> "wifi"
             SystemEvent.CLIPBOARD -> "clipboard"
             SystemEvent.LOCATION_ON, SystemEvent.LOCATION_OFF -> "location"
             SystemEvent.DND_ON, SystemEvent.DND_OFF -> "dnd"
@@ -1045,6 +1045,7 @@ class IslandEngine(
             SystemEvent.HOTSPOT_ON, SystemEvent.HOTSPOT_OFF -> "hotspot"
             SystemEvent.EYE_ON, SystemEvent.EYE_OFF -> "eye"
             SystemEvent.LINK_ON, SystemEvent.LINK_OFF -> "link"
+            SystemEvent.BLUETOOTH_ON, SystemEvent.BLUETOOTH_OFF -> "bluetooth"
         }
     }
 }

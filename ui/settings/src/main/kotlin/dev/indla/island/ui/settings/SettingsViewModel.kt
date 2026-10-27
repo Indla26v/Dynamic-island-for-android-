@@ -112,6 +112,7 @@ class SettingsViewModel @Inject constructor(
                 LiveContent.System(SystemEvent.DARK_MODE, null, "On"),
                 LiveContent.System(SystemEvent.LIGHT_MODE, null, "On"),
                 LiveContent.System(SystemEvent.WIFI_CONNECTED, null, "Connected"),
+                LiveContent.System(SystemEvent.BLUETOOTH_ON, null, "On"),
                 LiveContent.System(SystemEvent.CLIPBOARD, null, "Meet at 7, Café Coffee Day, 100 Ft Rd"),
                 LiveContent.System(SystemEvent.LOCATION_ON, null, "On"),
                 LiveContent.System(SystemEvent.HOTSPOT_ON, null, "On"),
