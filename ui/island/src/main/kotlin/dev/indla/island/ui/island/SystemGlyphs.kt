@@ -79,14 +79,25 @@ import kotlin.math.sin
 // Wi-Fi arcs light up one by one, the clipboard gets a tick. All finish within about a second,
 // except the torch's glow and Monster's flicker, which last only while the glance is shown.
 
+// One vibrant colour per glance, the same for on and off: "off" is told by the motion, not by
+// fading to grey.
 val AirplaneOrange = Color(0xFFFF9F0A)
 val SaverYellow = Color(0xFFFFD60A)
 val NightIndigo = Color(0xFF5E5CE6)
 val WifiBlue = Color(0xFF0A84FF)
-val ClipTeal = Color(0xFF64D2FF)
+val ClipTeal = Color(0xFF30D5C8)
 val MonsterRed = Color(0xFFFF3B30)
-val BedtimeTeal = Color(0xFF64D2FF)
-val EyeAmber = Color(0xFFFFB74D)
+val BedtimeTeal = Color(0xFF40C8E0)
+val EyeAmber = Color(0xFFFFB340)
+val BluetoothIndigo = Color(0xFF5B6CFF)
+val HotspotSky = Color(0xFF64D2FF)
+val LocationPink = Color(0xFFFF2D78)
+val LinkPurple = Color(0xFFBF5AF2)
+val RingCyan = Color(0xFF22D3EE)
+val VibrateViolet = Color(0xFFA78BFA)
+val AudioMint = Color(0xFF34E0A1)
+val DarkIndigo = Color(0xFF7C6CFF)
+val UnplugAmber = Color(0xFFFFB020)
 private val TorchWarm = Color(0xFFFFE9A8)
 
 @Composable
@@ -589,29 +600,27 @@ internal fun systemIcon(event: SystemEvent): ImageVector = when (event) {
 internal fun systemColor(system: dev.indla.island.model.LiveContent.System, accent: Color): Color =
     if (system.event == SystemEvent.BATTERY_LOW && (system.level ?: 0) > 10) TimerOrange else systemColor(system.event, accent)
 
-internal fun systemColor(event: SystemEvent, accent: Color): Color = when (event) {
-    SystemEvent.CHARGING, SystemEvent.SAVER_OFF -> CallGreen
-    SystemEvent.BATTERY_LOW, SystemEvent.RINGER_SILENT -> DeclineRed
-    SystemEvent.AIRPLANE_ON -> AirplaneOrange
-    SystemEvent.FLASHLIGHT_ON -> TorchWarm
+internal fun systemColor(event: SystemEvent, @Suppress("UNUSED_PARAMETER") accent: Color): Color = when (event) {
+    SystemEvent.CHARGING, SystemEvent.SAVER_OFF, SystemEvent.DATA_ON, SystemEvent.DATA_OFF, SystemEvent.UNLOCKED -> CallGreen
+    SystemEvent.UNPLUGGED -> UnplugAmber
+    SystemEvent.BATTERY_LOW, SystemEvent.RINGER_SILENT, SystemEvent.AUTH_FAILED -> DeclineRed
+    SystemEvent.RINGER_NORMAL -> RingCyan
+    SystemEvent.RINGER_VIBRATE -> VibrateViolet
+    SystemEvent.HEADPHONES_CONNECTED, SystemEvent.HEADPHONES_DISCONNECTED -> AudioMint
+    SystemEvent.AIRPLANE_ON, SystemEvent.AIRPLANE_OFF -> AirplaneOrange
+    SystemEvent.FLASHLIGHT_ON, SystemEvent.FLASHLIGHT_OFF -> TorchWarm
     SystemEvent.SAVER_ON, SystemEvent.LIGHT_MODE -> SaverYellow
-    SystemEvent.MONSTER_ON -> MonsterRed
-    SystemEvent.DARK_MODE -> NightIndigo
-    SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_ON, SystemEvent.BLUETOOTH_ON -> WifiBlue
+    SystemEvent.MONSTER_ON, SystemEvent.MONSTER_OFF -> MonsterRed
+    SystemEvent.DARK_MODE -> DarkIndigo
+    SystemEvent.WIFI_CONNECTED, SystemEvent.WIFI_DISCONNECTED, SystemEvent.WIFI_ON, SystemEvent.WIFI_OFF -> WifiBlue
+    SystemEvent.BLUETOOTH_ON, SystemEvent.BLUETOOTH_OFF -> BluetoothIndigo
     SystemEvent.CLIPBOARD -> ClipTeal
-    SystemEvent.LOCATION_ON -> WifiBlue
-    SystemEvent.DND_ON -> NightIndigo
-    SystemEvent.BEDTIME_ON -> BedtimeTeal
-    SystemEvent.DATA_ON, SystemEvent.UNLOCKED -> CallGreen
-    SystemEvent.AUTH_FAILED -> DeclineRed
-    SystemEvent.HOTSPOT_ON, SystemEvent.LINK_ON -> WifiBlue
-    SystemEvent.EYE_ON -> EyeAmber
-    SystemEvent.HOTSPOT_OFF, SystemEvent.EYE_OFF, SystemEvent.LINK_OFF -> Secondary
-    SystemEvent.WIFI_OFF, SystemEvent.BLUETOOTH_OFF -> Secondary
-    SystemEvent.LOCATION_OFF, SystemEvent.DND_OFF, SystemEvent.BEDTIME_OFF, SystemEvent.DATA_OFF -> Secondary
-    SystemEvent.UNPLUGGED, SystemEvent.HEADPHONES_DISCONNECTED, SystemEvent.AIRPLANE_OFF,
-    SystemEvent.FLASHLIGHT_OFF, SystemEvent.MONSTER_OFF, SystemEvent.WIFI_DISCONNECTED -> Secondary
-    else -> accent
+    SystemEvent.LOCATION_ON, SystemEvent.LOCATION_OFF -> LocationPink
+    SystemEvent.DND_ON, SystemEvent.DND_OFF -> NightIndigo
+    SystemEvent.BEDTIME_ON, SystemEvent.BEDTIME_OFF -> BedtimeTeal
+    SystemEvent.HOTSPOT_ON, SystemEvent.HOTSPOT_OFF -> HotspotSky
+    SystemEvent.EYE_ON, SystemEvent.EYE_OFF -> EyeAmber
+    SystemEvent.LINK_ON, SystemEvent.LINK_OFF -> LinkPurple
 }
 
 internal fun systemTitle(event: SystemEvent): String = when (event) {

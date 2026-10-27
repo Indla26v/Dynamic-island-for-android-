@@ -1,5 +1,6 @@
 package dev.indla.island.ui.island.scenes
 
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -15,30 +16,52 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.dp
-import dev.indla.island.ui.island.CallGreen
-import dev.indla.island.ui.island.DeclineRed
 import kotlin.math.PI
 import kotlin.math.sin
 
 /**
- * Unlocked: the fingerprint's ridges trace themselves in green from the centre out (or the face
- * outline traces, the eyes blink once and the smile draws), then the lock's shackle springs open.
- * Not recognised: the same trace in red, a three-shake shudder, and the shackle jiggles but stays
- * shut.
+ * Unlocked: the fingerprint's ridges trace in (or the face frame draws and the eyes blink), a
+ * scan line sweeps it, then the padlock's shackle springs open inside a burst ring. Not
+ * recognised: the same trace, a hard side-to-side shake, and a ring with an × slams onto the lock.
  */
 @Composable
-internal fun UnlockScene(face: Boolean, ok: Boolean, modifier: Modifier) {
-    val p = rememberTimeline(if (ok) 1_700 else 1_500)
-    val trace = p.segment(0f, 0.55f)
-    val color = if (ok) CallGreen else DeclineRed
+internal fun UnlockScene(face: Boolean, ok: Boolean, color: Color, modifier: Modifier) {
+    val p = rememberTimeline(if (ok) 1_800 else 1_600)
+    val trace = p.segment(0f, 0.5f)
     Canvas(modifier) {
-        val shake = if (ok) 0f else sin(p.segment(0.55f, 0.9f, androidx.compose.animation.core.LinearEasing) * 6 * PI).toFloat() * 4.dp.toPx() * (1f - p)
-        val symbol = Offset(size.height * 0.55f + shake, size.height / 2)
-        val r = size.height * 0.4f
+        val shake = if (ok) 0f else sin(p.segment(0.5f, 0.85f, LinearEasing) * 6 * PI).toFloat() * 4.dp.toPx() * (1f - p.segment(0.5f, 0.9f))
+        val r = size.height * 0.38f
+        val symbol = Offset(r + 4.dp.toPx() + shake, size.height / 2)
         if (face) faceTrace(symbol, r, trace, p, color) else fingerprint(symbol, r, trace, color)
-        val open = if (ok) overshoot(p.segment(0.55f, 0.85f), 0.25f) else 0f
-        val jiggle = if (ok) 0f else sin(p.segment(0.6f, 0.95f, androidx.compose.animation.core.LinearEasing) * 4 * PI).toFloat() * (1f - p) * 0.15f
-        lock(Offset(size.width - size.height * 0.55f, size.height * 0.62f), size.height * 0.3f, open + jiggle, Color.White)
+        // The scan line, once, as the trace completes.
+        val scan = p.segment(0.35f, 0.6f, LinearEasing)
+        if (scan in 0.01f..0.99f) {
+            val y = symbol.y - r + 2 * r * scan
+            drawLine(color.copy(alpha = 0.9f), Offset(symbol.x - r, y), Offset(symbol.x + r, y), 1.6.dp.toPx(), StrokeCap.Round)
+            glow(color, Offset(symbol.x, y), r * 0.9f, 0.3f)
+        }
+        val lockAt = Offset(size.width - size.height * 0.48f, size.height * 0.64f)
+        val s = size.height * 0.28f
+        if (ok) {
+            val open = overshoot(p.segment(0.55f, 0.8f), 0.3f)
+            val burst = p.segment(0.6f, 1f)
+            if (burst in 0.01f..0.99f) drawCircle(color.copy(alpha = 0.8f * (1f - burst)), s * (1.2f + 1.6f * burst), lockAt - Offset(0f, s * 0.3f), style = Stroke(2.dp.toPx()))
+            glow(color, lockAt - Offset(0f, s * 0.3f), s * 2.2f * p.segment(0.6f, 1f), 0.35f)
+            lock(lockAt, s, open, color)
+        } else {
+            val jiggle = sin(p.segment(0.5f, 0.85f, LinearEasing) * 4 * PI).toFloat() * (1f - p.segment(0.5f, 0.9f)) * 0.15f
+            lock(lockAt, s, jiggle, color)
+            val slam = overshoot(p.segment(0.7f, 0.95f), 0.35f)
+            if (slam > 0f) {
+                val c = lockAt + Offset(s * 0.9f, -s * 1.15f)
+                val rr = s * 0.62f * slam
+                drawCircle(Color.Black, rr + 1.5.dp.toPx(), c)
+                drawCircle(color, rr, c)
+                val x = rr * 0.45f
+                drawLine(Color.White, c - Offset(x, x), c + Offset(x, x), 1.6.dp.toPx(), StrokeCap.Round)
+                drawLine(Color.White, c + Offset(-x, x), c + Offset(x, -x), 1.6.dp.toPx(), StrokeCap.Round)
+            }
+        }
     }
 }
 
@@ -48,7 +71,7 @@ private fun DrawScope.fingerprint(c: Offset, r: Float, trace: Float, color: Colo
     for (i in 0 until 5) {
         val rr = r * (0.2f + 0.2f * i)
         val path = Path().apply { addArc(Rect(c.x - rr * 0.8f, c.y - rr, c.x + rr * 0.8f, c.y + rr), 200f - i * 4f, 300f - i * 18f) }
-        tracePath(path, trace.segment(i * 0.12f, 0.5f + i * 0.12f, androidx.compose.animation.core.LinearEasing), color, w)
+        tracePath(path, trace.segment(i * 0.12f, 0.5f + i * 0.12f, LinearEasing), color, w)
     }
 }
 
@@ -76,7 +99,7 @@ private fun DrawScope.faceTrace(c: Offset, r: Float, trace: Float, p: Float, col
     tracePath(smile, p.segment(0.4f, 0.7f), color, w)
 }
 
-/** A padlock; [open] 0 shut, 1 shackle swung open (values in between jiggle it). */
+/** A padlock in [color]; [open] 0 shut, 1 shackle swung open (values in between jiggle it). */
 private fun DrawScope.lock(bottomCenter: Offset, s: Float, open: Float, color: Color) {
     val bodyW = s * 1.6f
     val bodyH = s * 1.2f

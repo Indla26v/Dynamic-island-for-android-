@@ -19,17 +19,20 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.unit.dp
 import dev.indla.island.ui.island.CallGreen
 import dev.indla.island.ui.island.DeclineRed
 import dev.indla.island.ui.island.LocalFrozenTime
 import dev.indla.island.ui.island.MonsterRed
 import dev.indla.island.ui.island.SaverYellow
-import dev.indla.island.ui.island.Secondary
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -138,7 +141,7 @@ internal fun SaverScene(args: SceneArgs, on: Boolean, modifier: Modifier) {
             val r = size.height * 0.42f
             val c = Offset(r + 4.dp.toPx(), size.height * 0.72f)
             val needle = if (on) 0.75f - 0.6f * swing else 0.15f + 0.45f * swing
-            gauge(c, r, needle, Secondary, mix(from, to, swing))
+            gauge(c, r, needle, mix(from, to, swing), mix(from, to, swing))
             val bw = 44.dp.toPx()
             val bh = 20.dp.toPx()
             battery(size.width - bw - 6.dp.toPx(), (size.height - bh) / 2, bw, bh, level / 100f, mix(from, to, swing))
@@ -159,40 +162,71 @@ internal fun SaverScene(args: SceneArgs, on: Boolean, modifier: Modifier) {
 }
 
 /**
- * Monster mode: the needle whips to the redline with an overshoot, a flame bursts behind it and
- * speed lines streak left once. Off eases the needle back and the flame shrinks to an ember.
+ * Monster mode on: speed streaks rush past, the needle whips into the red and quivers there, and
+ * a flame bursts up with a white-hot core, throwing embers. Off: the needle sinks back to idle and
+ * the flame shrinks to a glowing ember.
  */
 @Composable
 internal fun MonsterScene(args: SceneArgs, on: Boolean, modifier: Modifier) {
-    val p = rememberTimeline(1_600)
-    val whip = p.segment(0f, 0.45f)
-    val flame = p.segment(0.25f, 0.7f)
-    val streak = p.segment(0.35f, 1f)
-    Box(modifier, contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) {
-            if (on && streak in 0.01f..0.99f) {
+    val p = rememberTimeline(1_900)
+    val fire = rememberVectorPainter(Icons.Rounded.LocalFireDepartment)
+    Canvas(modifier) {
+        val color = args.color
+        val r = size.height * 0.42f
+        val c = Offset(r + 4.dp.toPx(), size.height * 0.76f)
+        if (on) {
+            val streak = p.segment(0f, 0.5f)
+            if (streak in 0.01f..0.99f) {
                 for (i in 0 until 4) {
-                    val y = size.height * (0.25f + 0.17f * i)
-                    val head = size.width * (1f - streak)
-                    drawLine(MonsterRed.copy(alpha = 0.7f * (1f - streak)), Offset(head, y), Offset(head + size.width * 0.3f, y), 1.5.dp.toPx(), StrokeCap.Round)
+                    val y = size.height * (0.2f + 0.18f * i)
+                    val head = size.width * (1.1f - 1.2f * streak) + i * 6.dp.toPx()
+                    drawLine(color.copy(alpha = 0.75f * (1f - streak)), Offset(head, y), Offset(head + size.width * 0.28f, y), 1.6.dp.toPx(), StrokeCap.Round)
                 }
             }
-            val r = size.height * 0.44f
-            val c = Offset(size.width / 2, size.height * 0.74f)
-            val needle = if (on) overshoot(whip, 0.12f) else 1f - 0.5f * whip
-            gauge(c, r, needle, Secondary, Color.White, redline = MonsterRed)
         }
-        val size = if (on) 0.4f + 0.6f * overshoot(flame) else 1f - 0.65f * flame
-        Icon(
-            Icons.Rounded.LocalFireDepartment,
-            null,
-            tint = if (on) MonsterRed else Secondary,
-            modifier = Modifier.align(Alignment.CenterEnd).size(30.dp).graphicsLayer {
-                scaleX = size
-                scaleY = size
-                transformOrigin = TransformOrigin(0.5f, 1f)
-            },
-        )
+        val whip = p.segment(0.05f, 0.45f)
+        val quiver = if (on && p < 1f) sin(p * 46f) * 0.025f * (1f - p) else 0f
+        val needle = if (on) overshoot(whip, 0.16f) * 0.95f + quiver else 0.95f - 0.95f * p.segment(0f, 0.55f)
+        gauge(c, r, needle, color, Color.White, redline = color)
+        val s = 28.dp.toPx()
+        val fireBase = Offset(size.width - s / 2 - 2.dp.toPx(), size.height * 0.94f)
+        val k = if (on) {
+            (0.25f + 0.75f * overshoot(p.segment(0.3f, 0.65f), 0.3f)) * (1f + 0.07f * sin(p * 34f) * (1f - p))
+        } else {
+            1f - 0.9f * p.segment(0.15f, 0.65f)
+        }
+        if (k > 0.12f) {
+            glow(color, fireBase - Offset(0f, s * 0.4f * k), s * 0.8f * k, 0.45f)
+            scale(k, k, pivot = fireBase) {
+                translate(fireBase.x - s / 2, fireBase.y - s) {
+                    with(fire) { draw(Size(s, s), colorFilter = ColorFilter.tint(color)) }
+                }
+            }
+            // The white-hot core.
+            scale(k * 0.5f, k * 0.5f, pivot = fireBase) {
+                translate(fireBase.x - s / 2, fireBase.y - s) {
+                    with(fire) { draw(Size(s, s), colorFilter = ColorFilter.tint(SaverYellow)) }
+                }
+            }
+        }
+        if (on) {
+            val fly = p.segment(0.45f, 1f, androidx.compose.animation.core.LinearEasing)
+            for (i in 0 until 6) {
+                val t = ((fly * 1.3f) - i * 0.12f).coerceIn(0f, 1f)
+                if (t in 0.01f..0.99f) {
+                    val x = fireBase.x + sin(i * 2.3f + t * 5f) * 6.dp.toPx()
+                    val y = fireBase.y - s * 0.7f - t * size.height * 0.75f
+                    drawCircle(SaverYellow.copy(alpha = 1f - t), (1.6f - 0.8f * t).dp.toPx(), Offset(x, y))
+                }
+            }
+        } else {
+            val ember = p.segment(0.55f, 1f)
+            if (ember > 0f) {
+                val at = fireBase - Offset(0f, 3.dp.toPx())
+                glow(color, at, 8.dp.toPx() * ember, 0.7f)
+                drawCircle(SaverYellow, 2.2.dp.toPx() * ember, at)
+            }
+        }
     }
 }
 
@@ -231,7 +265,7 @@ internal fun TorchScene(args: SceneArgs, on: Boolean, modifier: Modifier) {
         Icon(
             if (on) Icons.Rounded.FlashlightOn else Icons.Rounded.FlashlightOff,
             null,
-            tint = if (on) TorchWarm else Secondary,
+            tint = TorchWarm,
             modifier = Modifier.size(28.dp).graphicsLayer { rotationZ = 90f },
         )
     }

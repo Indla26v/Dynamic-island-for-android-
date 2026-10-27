@@ -11,10 +11,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
@@ -38,11 +40,18 @@ internal data class SceneArgs(
 )
 
 /**
+ * Holds every scene at one point of its timeline (0..1) instead of playing it: review sheets
+ * render a scene's middle frames with it. Null in the app.
+ */
+internal val LocalScenePosition = staticCompositionLocalOf<Float?> { null }
+
+/**
  * One clock per scene, 0 to 1, linear, played once; every beat of the scene is a [segment] of
  * it. Screenshot tests (frozen time) get the last frame.
  */
 @Composable
 internal fun rememberTimeline(durationMs: Int): Float {
+    LocalScenePosition.current?.let { return it }
     val frozen = LocalFrozenTime.current != null
     val t = remember { Animatable(if (frozen) 1f else 0f) }
     LaunchedEffect(Unit) { t.animateTo(1f, tween(durationMs, easing = LinearEasing)) }
@@ -132,4 +141,22 @@ internal fun DrawScope.gauge(center: Offset, radius: Float, value: Float, arc: C
     val tip = Offset(center.x + (radius * 0.85f) * kotlin.math.cos(angle).toFloat(), center.y + (radius * 0.85f) * kotlin.math.sin(angle).toFloat())
     drawLine(needle, center, tip, stroke * 0.7f, StrokeCap.Round)
     drawCircle(needle, stroke * 0.8f, center)
+}
+
+/** A soft neon halo: the colour fading out from [center] over [radius]. */
+internal fun DrawScope.glow(color: Color, center: Offset, radius: Float, strength: Float = 0.55f) {
+    if (radius <= 0f || strength <= 0f) return
+    drawCircle(Brush.radialGradient(listOf(color.copy(alpha = strength), color.copy(alpha = 0f)), center, radius), radius, center)
+}
+
+/** The point [fraction] of the way along [path]. */
+internal fun pathPoint(path: Path, fraction: Float): Offset {
+    val measure = PathMeasure().apply { setPath(path, false) }
+    return measure.getPosition(measure.length * fraction.coerceIn(0f, 1f))
+}
+
+/** A spark: a white-hot core in a coloured halo, for heads of strokes and sparks. */
+internal fun DrawScope.spark(color: Color, at: Offset, r: Float) {
+    glow(color, at, r * 3.2f, 0.7f)
+    drawCircle(Color.White, r, at)
 }

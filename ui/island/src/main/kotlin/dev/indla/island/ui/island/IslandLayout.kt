@@ -5,6 +5,9 @@ import dev.indla.island.model.IslandMode
 import dev.indla.island.model.IslandItem
 import dev.indla.island.model.IslandUiState
 import dev.indla.island.model.ItemKind
+import dev.indla.island.model.LiveContent
+import dev.indla.island.model.SystemEvent
+import dev.indla.island.ui.island.scenes.sceneWidth
 import dev.indla.island.model.StylePreset
 import kotlin.math.abs
 import kotlin.math.max
@@ -79,10 +82,28 @@ data class IslandLayout(
         val item = state.current ?: return expandedWidth
         val width = when {
             state.quickActionsOpen || state.replyOpen -> expandedWidth
-            item.kind == ItemKind.SYSTEM -> GLANCE_WIDTH
+            item.kind == ItemKind.SYSTEM -> glanceWidth(item)
             else -> expandedWidth
         }
         return width.coerceAtMost(expandedWidth)
+    }
+
+    /**
+     * An opened glance is as wide as its content, centred on the camera: words left of it, the
+     * scene right of it, each side as wide as the larger of the two so the camera stays centred.
+     * Text width is estimated from its length (the bar is sized before it's drawn).
+     */
+    fun glanceWidth(item: IslandItem): Float {
+        val system = item.live as? LiveContent.System ?: return GLANCE_WIDTH
+        val (title, label) = glanceText(system)
+        val words = max(title.length * TITLE_CHAR, label.length * LABEL_CHAR).coerceAtMost(MAX_GLANCE_WORDS)
+        val scene = if (system.event == SystemEvent.HEADPHONES_CONNECTED && system.level != null) {
+            sceneWidth(system.event) + GLANCE_BUTTON_GAP + GLANCE_BUTTON
+        } else {
+            sceneWidth(system.event)
+        } + item.actions.size * (GLANCE_BUTTON_GAP + GLANCE_BUTTON)
+        val side = GLANCE_SIDE_PAD + max(words, scene)
+        return (cameraGap + 2 * side).coerceIn(MIN_GLANCE_WIDTH, GLANCE_WIDTH)
     }
 
     /** Bubble right of the pill (the second item); falls back to the left when there's no room. */
@@ -155,8 +176,22 @@ data class IslandLayout(
 
     companion object {
         const val EXPANDED_RADIUS = 34f
-        /** Expanded width for system glances. */
+        /** Widest and narrowest an opened glance gets. */
         const val GLANCE_WIDTH = 380f
+        const val MIN_GLANCE_WIDTH = 220f
+        /** Space between the bar's edge and its content. */
+        const val GLANCE_SIDE_PAD = 16f
+        /** Inline buttons at the bar's end (the torch's off switch, the earbuds' battery). */
+        const val GLANCE_BUTTON = 36f
+        const val GLANCE_BUTTON_GAP = 8f
+        /** Average glyph width of the title (15 sp semibold) and the label (13 sp), dp. */
+        private const val TITLE_CHAR = 8.4f
+        private const val LABEL_CHAR = 7.2f
+        private const val MAX_GLANCE_WORDS = 150f
+
+        /** The two lines left of the camera: what the glance is, and how it is now. */
+        fun glanceText(system: LiveContent.System): Pair<String, String> =
+            if (system.event == SystemEvent.HEADPHONES_CONNECTED) system.label to "Connected" else systemTitle(system.event) to system.label
         /** Opened up for reading: up to this many lines, wrapping, within this many rows. */
         const val READ_LINES = 8
         const val MAX_READ_ROWS = 14

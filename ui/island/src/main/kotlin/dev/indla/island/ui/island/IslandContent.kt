@@ -97,6 +97,7 @@ import dev.indla.island.ui.island.scenes.AudioScene
 import dev.indla.island.ui.island.scenes.SceneArgs
 import dev.indla.island.ui.island.scenes.SystemScene
 import dev.indla.island.ui.island.scenes.hasScene
+import dev.indla.island.ui.island.scenes.sceneWidth
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -932,10 +933,12 @@ private fun SlimGlance(item: IslandItem, system: LiveContent.System, layout: Isl
     val rightWidth = (rect.width - camera - gap / 2 - pad).coerceAtLeast(0f)
     val color = systemColor(system, accent)
     val headphones = system.event == SystemEvent.HEADPHONES_CONNECTED
+    val (title, label) = IslandLayout.glanceText(system)
+    // Words flush left of the camera, the scene flush right of it; the bar is sized to fit both.
     Row(Modifier.fillMaxSize().padding(horizontal = pad.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.width(leftWidth.dp)) {
             Text(
-                if (headphones) system.label else systemTitle(system.event),
+                title,
                 color = Color.White,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -943,8 +946,8 @@ private fun SlimGlance(item: IslandItem, system: LiveContent.System, layout: Isl
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                if (headphones) "Connected" else system.label,
-                color = if (headphones) Secondary else color,
+                label,
+                color = color,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -952,9 +955,13 @@ private fun SlimGlance(item: IslandItem, system: LiveContent.System, layout: Isl
             )
         }
         Spacer(Modifier.width(gap.dp))
-        Row(Modifier.width(rightWidth.dp).height(IslandLayout.GLANCE_ROW.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.width(rightWidth.dp).height(IslandLayout.GLANCE_ROW.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (headphones) {
-                AudioScene(system.device, connected = true, Color.White, Modifier.weight(1f).fillMaxHeight())
+                AudioScene(system.device, connected = true, color, Modifier.width(sceneWidth(system.event).dp).fillMaxHeight())
                 system.level?.let {
                     Spacer(Modifier.width(8.dp))
                     BatteryRing(it, 36.dp)
@@ -963,7 +970,7 @@ private fun SlimGlance(item: IslandItem, system: LiveContent.System, layout: Isl
                 SystemScene(
                     system.event,
                     SceneArgs(system.level, color, system.label, system.device, face = system.level == FACE),
-                    Modifier.weight(1f).fillMaxHeight(),
+                    Modifier.width(sceneWidth(system.event).dp).fillMaxHeight(),
                 )
             }
             // Inline buttons: the flashlight's off switch.
