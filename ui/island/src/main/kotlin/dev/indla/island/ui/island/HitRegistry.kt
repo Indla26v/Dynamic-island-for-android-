@@ -61,6 +61,8 @@ class HitRegistry {
         const val REPLY_ROW = "reply"
         const val QUICK_MUTE = "quick:mute"
         const val QUICK_DISMISS = "quick:dismiss"
+        /** Clears the panel deck's card from the phone's notification panel. */
+        const val PANEL_CLEAR = "panel:clear"
         /** Not a region of its own: a tap here opens the item's app, like tapping the card. */
         const val OPEN_APP = "open"
         fun action(index: Int) = "action:$index"

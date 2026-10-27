@@ -361,6 +361,9 @@ class IslandAccessibilityService : AccessibilityService() {
             // A glance over the open shade never takes the quick settings' touches.
             engine.environment.shadeOpen && state.current?.kind == ItemKind.SYSTEM -> null
             state.positionEditing && state.mode == IslandMode.REST -> layout.rest().grow(14f)
+            // The resting pill opens what's in the notification panel; with no pill, rest
+            // takes no touches and the status bar gets them all.
+            state.mode == IslandMode.REST && state.showsRestPill && !engine.environment.shadeOpen -> layout.rest().grow(8f)
             state.mode == IslandMode.REST -> null
             state.mode == IslandMode.EXPANDED -> layout.expandedRect(state)
             state.mode == IslandMode.SPLIT -> layout.compact().union(layout.bubble()).let { u ->
@@ -429,7 +432,7 @@ class IslandAccessibilityService : AccessibilityService() {
             if (gesture == dev.indla.island.model.IslandGesture.LONG_PRESS) {
                 hitHost?.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             }
-            engine.onGesture(gesture)
+            if (engine.state.value.mode == IslandMode.REST) onRestGesture(gesture) else engine.onGesture(gesture)
         },
         onRegionTap = { id, point ->
             hitHost?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
@@ -444,7 +447,7 @@ class IslandAccessibilityService : AccessibilityService() {
                 id == HitRegistry.MEDIA_NEXT -> engine.onMediaCommand(MediaCommand.Next)
                 id == HitRegistry.MEDIA_SEEK -> seek(point)
                 id == HitRegistry.QUICK_MUTE -> engine.onMuteApp()
-                id == HitRegistry.QUICK_DISMISS -> engine.onDismissCurrent()
+                id == HitRegistry.QUICK_DISMISS || id == HitRegistry.PANEL_CLEAR -> engine.onDismissCurrent()
                 id.startsWith(HitRegistry.OPEN_APP) -> {
                     // No controls offered to other apps: open it and press its own button.
                     val target = state.current?.packageName
@@ -457,6 +460,7 @@ class IslandAccessibilityService : AccessibilityService() {
                     }
                     if (target != null && kind != null) controls.press(target, kind, back)
                 }
+                state.mode == IslandMode.REST -> onRestGesture(dev.indla.island.model.IslandGesture.TAP)
                 else -> engine.onGesture(dev.indla.island.model.IslandGesture.TAP)
             }
         },
@@ -502,6 +506,21 @@ class IslandAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED
         info.eventTypes = if (on) info.eventTypes or copyEvents else info.eventTypes and copyEvents.inv()
         serviceInfo = info
+    }
+
+    /**
+     * The resting pill: a tap opens what's in the notification panel; pulling down from it still
+     * pulls down the panel itself, as the status bar under it would.
+     */
+    private fun onRestGesture(gesture: dev.indla.island.model.IslandGesture) {
+        when (gesture) {
+            dev.indla.island.model.IslandGesture.TAP -> {
+                hitHost?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                engine.onRestTap()
+            }
+            dev.indla.island.model.IslandGesture.SWIPE_DOWN -> performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+            else -> Unit
+        }
     }
 
     // ---- Environment ---------------------------------------------------------------------------

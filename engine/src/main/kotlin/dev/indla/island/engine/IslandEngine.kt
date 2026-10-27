@@ -68,7 +68,17 @@ class IslandEngine(
     private val pendingPosts = ArrayDeque<RawNotification>()
     private var env = Environment()
 
-    private class Active(item: IslandItem, var expiresAt: Long, val selfTest: Boolean, val missed: Boolean = false) {
+    /**
+     * @param panel the deck opened from the resting pill: what's in the notification panel now.
+     *   It is a view of the panel, so it goes as soon as it closes.
+     */
+    private class Active(
+        item: IslandItem,
+        var expiresAt: Long,
+        val selfTest: Boolean,
+        val missed: Boolean = false,
+        val panel: Boolean = false,
+    ) {
         /** Oldest first. One page, unless notifications stacked. */
         val pages = mutableListOf(item)
         var page = 0
@@ -114,6 +124,15 @@ class IslandEngine(
     private var bedtimeKey: String? = null
     /** Link to Windows' ongoing "connected" notification, while it's up. */
     private var linkKey: String? = null
+
+    /** A notification as it stands in the phone's panel, and whether Island posted it as a test. */
+    private class InShade(val item: IslandItem, val selfTest: Boolean)
+
+    /**
+     * Mirror of the phone's notification panel (oldest first), from apps the island may show:
+     * what the resting pill opens. Kept by the same posts and removals the listener sends.
+     */
+    private val inShade = LinkedHashMap<String, InShade>()
 
     /** key -> content hash of everything posted and not yet removed; bounded. */
     private val seen = object : LinkedHashMap<String, Int>(64, 0.75f, true) {
@@ -175,15 +194,18 @@ class IslandEngine(
         val parsed = when (val result = parser.parse(raw, explicit ?: AppRule(raw.packageName, show = true))) {
             is ParseResult.Show -> result.item
             is ParseResult.Skip -> {
+                inShade.remove(raw.key)
                 removeKey(raw.key)
                 return
             }
         }
         if (!shows(parsed, explicit, raw.isSelfTest)) {
+            inShade.remove(raw.key)
             removeKey(raw.key)
             return
         }
         val item = withAccent(parsed, explicit, raw.appAccentArgb)
+        mirror(raw.key, item, raw.isSelfTest)
         if (item.isLive) {
             seen[raw.key] = item.contentHash
             upsertLive(item, raw.isSelfTest, pop = true)
@@ -194,6 +216,25 @@ class IslandEngine(
         // FLAG_ONLY_ALERT_ONCE re-posts whose content didn't change.
         val previousHash = seen.put(raw.key, item.contentHash)
         if (previousHash == item.contentHash) return
+
+        // The panel deck is open: news joins it as its newest card instead of popping over it.
+        val deck = active.getOrNull(currentIndex)?.takeIf { it.panel && expanded }
+        if (deck != null) {
+            if (!item.isGroupSummary) {
+                val at = deck.pages.indexOfFirst { it.key == raw.key }
+                if (at >= 0) {
+                    deck.pages[at] = item
+                } else {
+                    deck.pages.removeAll { it.isGroupSummary && it.groupKey != null && it.groupKey == item.groupKey }
+                    deck.pages += item
+                    deck.page = deck.pages.lastIndex
+                    pageTurn = 1
+                }
+                touch()
+                publish()
+            }
+            return
+        }
 
         // Summaries never pop while their children are there; a child replaces its summary.
         if (item.isGroupSummary && item.groupKey != null) {
@@ -265,14 +306,51 @@ class IslandEngine(
      * a call in progress) without popping.
      */
     fun onSnapshot(raws: List<RawNotification>) {
-        for (raw in raws) {
+        // The listener's whole view of the panel: the mirror starts over from it.
+        inShade.clear()
+        for (raw in raws.sortedBy { it.postTime }) {
             val explicit = rules[raw.packageName]
             val item = (parser.parse(raw, explicit ?: AppRule(raw.packageName, show = true)) as? ParseResult.Show)?.item ?: continue
             seen[raw.key] = item.contentHash
-            if (item.isLive && shows(item, explicit, raw.isSelfTest)) {
-                upsertLive(withAccent(item, explicit, raw.appAccentArgb), raw.isSelfTest, pop = false)
+            if (!shows(item, explicit, raw.isSelfTest)) continue
+            val shown = withAccent(item, explicit, raw.appAccentArgb)
+            if (item.isLive) {
+                upsertLive(shown, raw.isSelfTest, pop = false)
+            } else {
+                mirror(raw.key, shown, raw.isSelfTest)
             }
         }
+    }
+
+    /** Keeps [inShade] in step with a post: notifications in, live activities (shown on their own) out. */
+    private fun mirror(key: String, item: IslandItem, selfTest: Boolean) {
+        inShade.remove(key)
+        if (item.isLive) return
+        inShade[key] = InShade(item, selfTest)
+        while (inShade.size > MAX_SHADE) inShade.remove(inShade.keys.first())
+    }
+
+    /**
+     * Tap on the resting pill: open what's in the notification panel as a deck, newest first.
+     * Only apps the island may show; a group's summary only when none of its messages are there.
+     */
+    fun onRestTap() {
+        if (!settings.enabled || active.isNotEmpty() || !isVisible()) return
+        val entries = inShade.values.filter { shows(it.item, rules[it.item.packageName], it.selfTest) }
+        val withChildren = entries.filter { !it.item.isGroupSummary }.mapNotNullTo(HashSet()) { it.item.groupKey }
+        val pages = entries.map { it.item }.filter { !(it.isGroupSummary && it.groupKey in withChildren) }
+        if (pages.isEmpty()) return
+        val deck = Active(pages.last(), FOREVER, selfTest = false, panel = true)
+        deck.pages.clear()
+        deck.pages += pages
+        deck.page = deck.pages.lastIndex
+        active.add(0, deck)
+        currentIndex = 0
+        expanded = true
+        replyOpen = false
+        quickActionsOpen = false
+        expandedDeadline = clock() + EXPANDED_IDLE_MS
+        publish()
     }
 
     fun onRemoved(key: String) {
@@ -287,6 +365,7 @@ class IslandEngine(
             return
         }
         seen.remove(key)
+        inShade.remove(key)
         dismissedLive.remove(key)
         parked.removeAll { it.item.key == key }
         removeKey(key)
@@ -691,6 +770,8 @@ class IslandEngine(
     private fun busy() = replyOpen || quickActionsOpen
 
     private fun insert(entry: Active, autoExpand: Boolean) {
+        // Something new takes the island (a call, a glance): the panel deck steps aside for it.
+        if (!busy()) removeWhere { it.panel }
         if (busy()) {
             // Don't yank the card away from someone who is typing; queue behind it.
             active.add((currentIndex + 1).coerceAtMost(active.size), entry)
@@ -768,7 +849,10 @@ class IslandEngine(
             }
             GestureAction.OPEN_APP -> {
                 effects.openItem(item.key)
-                if (item.isLive) collapse() else {
+                if (active[currentIndex].panel) {
+                    // Off to the app: the deck has done its job.
+                    collapse()
+                } else if (item.isLive) collapse() else {
                     removeCurrent()
                     return
                 }
@@ -846,6 +930,8 @@ class IslandEngine(
             pile.page = pile.pages.lastIndex.coerceAtLeast(0)
             if (pile.pages.isEmpty()) removeWhere { it === pile }
         }
+        // The panel deck only lives while it's open.
+        removeWhere { it.panel }
     }
 
     private fun clearIsland() {
@@ -862,7 +948,17 @@ class IslandEngine(
             e.viewed.remove(e.item.key)
             e.pages.removeAt(e.page)
             e.page = e.page.coerceAtMost(e.pages.lastIndex).coerceAtLeast(0)
-            if (e.pages.isEmpty()) active.removeAt(currentIndex)
+            if (e.pages.isEmpty()) {
+                active.removeAt(currentIndex)
+            } else if (e.panel && expanded) {
+                // Clearing one from the panel deck: stay open on the next.
+                replyOpen = false
+                quickActionsOpen = false
+                readMoreKey = null
+                touch()
+                publish()
+                return
+            }
         }
         currentIndex = 0
         // Whatever queued up while the user was busy gets a fresh turn on screen.
@@ -952,6 +1048,7 @@ class IslandEngine(
     }
 
     private fun withStack(e: Active): IslandItem {
+        if (e.panel) return e.item.copy(stack = StackInfo(e.pages.size, e.page, panel = true))
         if (e.pages.size < 2 && !e.missed) return e.item
         val others = if (e.missed) {
             e.pages.asReversed().map { it.packageName }.filter { it != e.item.packageName }.distinct().take(3)
@@ -1005,6 +1102,8 @@ class IslandEngine(
         const val LIVE_LINGER_MS = 10_000L
         const val MAX_ITEMS = 5
         const val MAX_MISSED = 20
+        /** How many of the panel's notifications the resting pill can show. */
+        const val MAX_SHADE = 50
         const val SYSTEM_PACKAGE = "android"
         const val SYSTEM_KEY_PREFIX = "system:"
         private const val MAX_SEEN = 256

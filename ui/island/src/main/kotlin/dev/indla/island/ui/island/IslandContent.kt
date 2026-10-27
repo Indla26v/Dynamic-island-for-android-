@@ -48,6 +48,7 @@ import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.FlashlightOff
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Navigation
@@ -338,7 +339,7 @@ private fun ExpandedContent(
     }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(horizontal = pad.dp)) {
-            Band(item, layout, rect, pad, accent)
+            Band(item, layout, rect, pad, accent, registry)
             when {
                 state.quickActionsOpen -> QuickActions(item, registry)
                 item.live is LiveContent.Call -> CallBody(item, item.live as LiveContent.Call, registry)
@@ -378,7 +379,7 @@ private const val MAX_DOTS = 7
 
 /** The camera row: small accessories left and right of the camera, nothing under it. */
 @Composable
-private fun Band(item: IslandItem, layout: IslandLayout, rect: IslandRect, pad: Float, accent: Color) {
+private fun Band(item: IslandItem, layout: IslandLayout, rect: IslandRect, pad: Float, accent: Color, registry: HitRegistry?) {
     val camera = layout.cameraOffsetIn(rect)
     val leftWidth = (camera - layout.cameraGap / 2 - pad).coerceAtLeast(0f)
     val rightWidth = (rect.width - camera - layout.cameraGap / 2 - pad).coerceAtLeast(0f)
@@ -388,6 +389,10 @@ private fun Band(item: IslandItem, layout: IslandLayout, rect: IslandRect, pad: 
                 Icon(Icons.Rounded.History, null, tint = accent, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(5.dp))
                 Text("Missed · ${item.appLabel}", color = Secondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            } else if (item.stack?.panel == true) {
+                Icon(Icons.Rounded.Notifications, null, tint = accent, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(5.dp))
+                Text(item.appLabel, color = Secondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             } else if (item.kind != ItemKind.SYSTEM && !isIslandPackage(item.packageName)) {
                 AppIconImage(item.packageName, 16.dp)
                 Spacer(Modifier.width(6.dp))
@@ -420,9 +425,26 @@ private fun Band(item: IslandItem, layout: IslandLayout, rect: IslandRect, pad: 
                         Text("  ·  ", color = Secondary, fontSize = 12.sp)
                     }
                     Text(relativeTime(item.postTime, now), color = Secondary, fontSize = 12.sp, maxLines = 1)
+                    if (item.stack?.panel == true) PanelClear(registry)
                 }
             }
         }
+    }
+}
+
+/** Clears the panel deck's card from the phone's notification panel too. */
+@Composable
+private fun PanelClear(registry: HitRegistry?) {
+    Spacer(Modifier.width(8.dp))
+    Box(
+        Modifier
+            .size(22.dp)
+            .clip(CircleShape)
+            .background(Color(0xFF3A3A3C))
+            .hitRegion(registry, HitRegistry.PANEL_CLEAR),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Rounded.Close, "Clear notification", tint = Color.White, modifier = Modifier.size(14.dp))
     }
 }
 

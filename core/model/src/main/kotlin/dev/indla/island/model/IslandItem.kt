@@ -48,6 +48,8 @@ data class StackInfo(
     val missed: Boolean = false,
     /** Other apps in the pile, newest first, at most three: drawn as overlapping icons. */
     val otherPackages: List<String> = emptyList(),
+    /** What's in the notification panel, opened from the resting pill. */
+    val panel: Boolean = false,
 )
 
 enum class ItemKind {

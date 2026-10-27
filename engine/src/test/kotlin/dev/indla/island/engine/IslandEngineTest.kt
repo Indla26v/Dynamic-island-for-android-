@@ -602,6 +602,80 @@ class IslandEngineTest {
         assertEquals(listOf(SystemEvent.BLUETOOTH_OFF), h.state.items.map { (it.live as LiveContent.System).event })
     }
 
+    // ---- The resting pill's panel deck ------------------------------------------------------
+
+    /** Posts [raws], then lets the island go back to rest with them still in the panel. */
+    private fun TestScope.inPanel(h: Harness, vararg raws: dev.indla.island.model.RawNotification) {
+        raws.forEach(h.engine::onPosted)
+        advanceTimeBy(60_000); runCurrent()
+        assertEquals(IslandMode.REST, h.state.mode)
+    }
+
+    @Test
+    fun restTap_withAnEmptyPanel_staysAtRest() = test { h ->
+        h.engine.onRestTap()
+        assertEquals(IslandMode.REST, h.state.mode)
+    }
+
+    @Test
+    fun restTap_opensThePanelNewestFirst_onlyAppsTheIslandShows() = test { h ->
+        // Gmail switched off in the Apps tab.
+        h.rules.value = mapOf(Fixtures.gmail().packageName to AppRule(Fixtures.gmail().packageName, show = false))
+        runCurrent()
+        inPanel(h, Fixtures.whatsAppDirect(), Fixtures.gmail(), Fixtures.telegramPhotos())
+        h.engine.onRestTap()
+        assertEquals(IslandMode.EXPANDED, h.state.mode)
+        val stack = h.state.current?.stack
+        assertEquals(true, stack?.panel)
+        assertEquals(2, stack?.size)
+        assertEquals("opens on the newest", Fixtures.telegramPhotos().key, h.state.current?.key)
+        h.engine.onGesture(IslandGesture.SWIPE_UP)
+        assertEquals("swipe up goes back in time", Fixtures.whatsAppDirect().key, h.state.current?.key)
+    }
+
+    @Test
+    fun panelDeck_leavesOutLiveActivities() = test { h ->
+        h.engine.onPosted(Fixtures.downloadProgress(40))
+        h.engine.onDismissCurrent()
+        inPanel(h, Fixtures.whatsAppDirect())
+        h.engine.onRestTap()
+        assertEquals(listOf(Fixtures.whatsAppDirect().key), listOfNotNull(h.state.current?.key))
+        assertEquals(1, h.state.current?.stack?.size)
+    }
+
+    @Test
+    fun panelDeck_followsThePanel() = test { h ->
+        inPanel(h, Fixtures.whatsAppDirect(), Fixtures.telegramPhotos())
+        h.engine.onRestTap()
+        h.engine.onRemoved(Fixtures.telegramPhotos().key)
+        assertEquals("cleared in the panel, gone from the deck", Fixtures.whatsAppDirect().key, h.state.current?.key)
+        assertEquals(IslandMode.EXPANDED, h.state.mode)
+        h.engine.onRemoved(Fixtures.whatsAppDirect().key)
+        assertEquals(IslandMode.REST, h.state.mode)
+    }
+
+    @Test
+    fun panelDeck_clear_clearsItFromThePanel_andShowsTheNext() = test { h ->
+        inPanel(h, Fixtures.whatsAppDirect(), Fixtures.telegramPhotos())
+        h.engine.onRestTap()
+        h.engine.onDismissCurrent()
+        assertEquals(listOf("dismiss:${Fixtures.telegramPhotos().key}"), h.effects.calls)
+        assertEquals(IslandMode.EXPANDED, h.state.mode)
+        assertEquals(Fixtures.whatsAppDirect().key, h.state.current?.key)
+    }
+
+    @Test
+    fun panelDeck_takesNews_thenClosesWhenIdle() = test { h ->
+        inPanel(h, Fixtures.whatsAppDirect())
+        h.engine.onRestTap()
+        h.engine.onPosted(Fixtures.telegramPhotos())
+        assertEquals("news joins the deck instead of popping over it", 1, h.state.items.size)
+        assertEquals(Fixtures.telegramPhotos().key, h.state.current?.key)
+        assertEquals(2, h.state.current?.stack?.size)
+        advanceTimeBy(IslandEngine.EXPANDED_IDLE_MS + 100); runCurrent()
+        assertEquals("the deck is a view of the panel: closing it leaves nothing behind", IslandMode.REST, h.state.mode)
+    }
+
     @Test
     fun timerPause_keepsTheCardOpen() = test { h ->
         h.engine.onPosted(Fixtures.clockTimer())
