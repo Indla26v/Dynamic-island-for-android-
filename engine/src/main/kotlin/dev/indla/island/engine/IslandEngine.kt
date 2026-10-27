@@ -991,10 +991,11 @@ class IslandEngine(
     }
 
     companion object {
-        const val EXPANDED_IDLE_MS = 4_000L
+        /** How long an opened card stays open with nothing touched: 5 s, notifications and glances alike. */
+        const val EXPANDED_IDLE_MS = 5_000L
         const val SYSTEM_EVENT_MS = 3_000L
-        /** How long the headphones card stays open. */
-        const val SHOWCASE_MS = 3_500L
+        /** How long a glance's card (headphones, modes) stays open. */
+        const val SHOWCASE_MS = EXPANDED_IDLE_MS
         const val BRIEF_SHOWCASE_MS = 2_500L
         /** How long a glance stays as the pill after its card closes. */
         const val COMPACT_TAIL_MS = 2_500L

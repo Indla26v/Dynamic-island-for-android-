@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -43,12 +43,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.indla.island.model.AppRule
-import dev.indla.island.model.IslandAppearance
 import dev.indla.island.model.Priority
 import dev.indla.island.ui.island.AppIconImage
 import dev.indla.island.ui.settings.AppEntry
 import dev.indla.island.ui.settings.components.GlassToggleRow
-import dev.indla.island.ui.settings.components.IslandPreview
 import dev.indla.island.ui.settings.components.RowDivider
 import dev.indla.island.ui.settings.components.SectionLabel
 import dev.indla.island.ui.settings.components.Segmented
@@ -62,10 +60,14 @@ val AccentSwatches = listOf(0xFF8AB4F8, 0xFF7EE0B5, 0xFFFFC66D, 0xFFFF8A80, 0xFF
 
 private val IconSize = 36.dp
 
+/** The icon sits concentric in its pill: the same gap above, below and before it. */
+private val IconGap = Space.s
+
+/** An open app grows from a pill into a card with these corners. */
+private val OpenRadius = 28.dp
+
 @Composable
 fun AppsScreen(
-    appearance: IslandAppearance,
-    reduceTransparency: Boolean,
     apps: List<AppEntry>?,
     ruleFor: (String) -> AppRule,
     onSave: (AppRule) -> Unit,
@@ -76,24 +78,25 @@ fun AppsScreen(
     val filtered = apps.orEmpty().filter { query.isBlank() || it.label.contains(query, ignoreCase = true) }
     val (shown, hidden) = filtered.partition { ruleFor(it.packageName).show }
 
-    // Rows sit 1 dp apart so each section reads as one inset group; sections add their own space.
-    TabScaffold(title = "Apps", pinned = { IslandPreview(appearance, reduceTransparency) }, itemSpacing = 1.dp) {
+    // No preview here: the list is the page. Every row is its own glass pill, a small gap apart.
+    TabScaffold(title = "Apps", itemSpacing = Space.s) {
         item(key = "about") {
             // One plain sentence instead of a wall of switches: what this list is for.
             Text(
-                "Pick which apps' notifications pop up on the island. Music, calls, timers, downloads, deliveries and phone modes show on their own.",
+                "Choose which apps pop up on the island. Music, calls, timers and phone modes always show.",
                 color = LocalGlass.current.contentSecondary,
                 fontSize = 13.sp,
-                modifier = Modifier.padding(start = Space.xs, end = Space.xs, bottom = Space.m),
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(horizontal = Space.rowPadding),
             )
         }
         item(key = "search") {
-            SearchField(query, { query = it }, Modifier.padding(bottom = Space.s))
+            SearchField(query, { query = it })
         }
         if (!apps.isNullOrEmpty()) {
             item(key = "all") {
                 val allOn = apps.all { ruleFor(it.packageName).show }
-                Box(Modifier.padding(bottom = Space.xs).fillMaxWidth().glassSurface()) {
+                Box(Modifier.fillMaxWidth().glassSurface(CircleShape)) {
                     GlassToggleRow(
                         "All apps",
                         allOn,
@@ -133,12 +136,14 @@ private fun LazyListScope.section(
 ) {
     if (apps.isEmpty()) return
     item(key = "label:$title") {
-        SectionLabel("$title · ${apps.size}", Modifier.padding(top = Space.m, bottom = Space.xs))
+        SectionLabel("$title · ${apps.size}", Modifier.padding(top = Space.s))
     }
-    itemsIndexed(apps, key = { _, app -> app.packageName }) { index, app ->
+    items(apps, key = { app -> app.packageName }) { app ->
         val rule = ruleFor(app.packageName)
         val open = expanded == app.packageName
-        Column(Modifier.animateItem().fillMaxWidth().glassSurface(groupShape(index, apps.size))) {
+        // A pill while closed; opening it makes room for the editor under a card's corners.
+        val shape = if (open) RoundedCornerShape(OpenRadius) else CircleShape
+        Column(Modifier.animateItem().fillMaxWidth().glassSurface(shape)) {
             // Switching an app back on also lifts a long-press Mute.
             AppRow(app, rule, onToggle = { onSave(rule.copy(show = it, muted = rule.muted && !it)) }, onClick = { onExpand(if (open) null else app.packageName) })
             AnimatedVisibility(open) { RuleEditor(rule, onSave) }
@@ -188,13 +193,13 @@ private fun AppRow(app: AppEntry, rule: AppRule, onToggle: (Boolean) -> Unit, on
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = Space.rowPadding, vertical = Space.xs),
+            .padding(start = IconGap, end = Space.m, top = IconGap, bottom = IconGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AppIconImage(app.packageName, IconSize)
         Spacer(Modifier.width(Space.m))
         Column(Modifier.weight(1f)) {
-            Text(app.label, color = glass.content, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(app.label, color = glass.content, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
             val details = buildList {
                 if (rule.muted) add("Muted")
                 if (rule.show) add(priorityLabel(rule.priority))
@@ -203,7 +208,7 @@ private fun AppRow(app: AppEntry, rule: AppRule, onToggle: (Boolean) -> Unit, on
                 if (app.isMessaging) add("Chat")
             }
             if (details.isNotEmpty()) {
-                Text(details.joinToString(" · "), color = glass.contentSecondary, fontSize = 13.sp, maxLines = 1)
+                Text(details.joinToString(" · "), color = glass.contentSecondary, fontSize = 12.sp, maxLines = 1)
             }
         }
         Switch(checked = rule.show, onCheckedChange = onToggle)
@@ -212,7 +217,7 @@ private fun AppRow(app: AppEntry, rule: AppRule, onToggle: (Boolean) -> Unit, on
 
 @Composable
 private fun RuleEditor(rule: AppRule, onSave: (AppRule) -> Unit) {
-    val inset = Space.rowPadding + IconSize + Space.m
+    val inset = IconGap + IconSize + Space.m
     Column(Modifier.fillMaxWidth().padding(bottom = Space.s)) {
         RowDivider(start = inset)
         Segmented(
@@ -270,16 +275,4 @@ private fun priorityLabel(p: Priority) = when (p) {
     Priority.HIGH -> "High"
     Priority.NORMAL -> "Normal"
     Priority.SILENT -> "Silent"
-}
-
-/** iOS-Settings-style inset group: only the first and last rows are fully rounded. */
-private fun groupShape(index: Int, count: Int): RoundedCornerShape {
-    val r = 24.dp
-    val small = 4.dp
-    return RoundedCornerShape(
-        topStart = if (index == 0) r else small,
-        topEnd = if (index == 0) r else small,
-        bottomStart = if (index == count - 1) r else small,
-        bottomEnd = if (index == count - 1) r else small,
-    )
 }

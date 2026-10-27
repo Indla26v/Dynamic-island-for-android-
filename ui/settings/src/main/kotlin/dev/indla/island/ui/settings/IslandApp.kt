@@ -136,8 +136,6 @@ fun IslandApp(showDebug: Boolean) {
                                 onOpenFixtures = { showFixtures = true },
                             )
                             1 -> AppsScreen(
-                                appearance = s.appearance,
-                                reduceTransparency = reduceTransparency,
                                 apps = apps,
                                 ruleFor = { pkg -> rules[pkg] ?: vm.ruleFor(pkg) },
                                 onSave = { vm.saveRule(it) },

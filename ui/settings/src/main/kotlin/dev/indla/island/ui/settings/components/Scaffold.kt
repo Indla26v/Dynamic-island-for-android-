@@ -65,12 +65,13 @@ private val TabBarClearance = 52.dp + Space.m + Space.l
 
 /**
  * One UI-style screen: a large title that collapses on scroll (with an optional control on the
- * right, in thumb reach once collapsed), the live preview pinned under it, and the content.
+ * right, in thumb reach once collapsed), the live preview pinned under it if the screen has
+ * one, and the content.
  */
 @Composable
 fun TabScaffold(
     title: String,
-    pinned: @Composable () -> Unit,
+    pinned: (@Composable () -> Unit)? = null,
     headerAction: (@Composable () -> Unit)? = null,
     itemSpacing: Dp = Space.cardGap,
     content: LazyListScope.() -> Unit,
@@ -119,7 +120,7 @@ fun TabScaffold(
             )
             headerAction?.invoke()
         }
-        Box(Modifier.padding(horizontal = Space.gutter)) { pinned() }
+        if (pinned != null) Box(Modifier.padding(horizontal = Space.gutter)) { pinned() }
         LazyColumn(
             modifier = Modifier.fillMaxSize().fadeTopEdge(Space.cardGap),
             contentPadding = PaddingValues(
