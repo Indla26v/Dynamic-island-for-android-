@@ -20,6 +20,7 @@ import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.BluetoothDisabled
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DoNotDisturbOff
@@ -138,7 +139,7 @@ internal fun SystemGlyph(event: SystemEvent, color: Color, size: Dp, level: Int?
         }
         SystemEvent.DATA_ON -> DataArrows(color, size, on = true)
         SystemEvent.DATA_OFF -> DataArrows(color, size, on = false)
-        SystemEvent.UNLOCKED -> Unlocked(color, size, face = level == FACE)
+        SystemEvent.UNLOCKED -> Unlocked(color, size)
         SystemEvent.AUTH_FAILED -> NotRecognised(color, size, face = level == FACE)
         else -> LegacyGlyph(event, color, size)
     }
@@ -248,29 +249,29 @@ private fun DataArrows(color: Color, size: Dp, on: Boolean) {
     }
 }
 
-/** Unlocked: the face or fingerprint fills in green and a lock pops open beside it. */
+/** Unlocked, however: the open lock springs in, then gives way to a green tick. */
 @Composable
-private fun Unlocked(color: Color, size: Dp, face: Boolean) {
-    val p = rememberReveal(900)
-    val open = rememberSpringIn(0f, 1f, 0.5f, Spring.StiffnessMediumLow, delayMs = 350)
-    Box(Modifier.size(size)) {
-        Icon(
-            if (face) Icons.Rounded.Face else Icons.Rounded.Fingerprint,
-            null,
-            tint = color.copy(alpha = 0.35f + 0.65f * p),
-            modifier = Modifier.size(size).graphicsLayer {
-                val s = 0.85f + 0.15f * p
-                scaleX = s
-                scaleY = s
-            },
-        )
+private fun Unlocked(color: Color, size: Dp) {
+    val lock = rememberSpringIn(0.6f, 1f, 0.5f, Spring.StiffnessMediumLow)
+    val tick = rememberSpringIn(0f, 1f, 0.45f, Spring.StiffnessMediumLow, delayMs = 450)
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         Icon(
             Icons.Rounded.LockOpen,
             null,
-            tint = Color.White,
-            modifier = Modifier.align(Alignment.BottomEnd).offset(size * 0.14f, size * 0.1f).size(size * 0.48f).graphicsLayer {
-                scaleX = open
-                scaleY = open
+            tint = color,
+            modifier = Modifier.size(size).graphicsLayer {
+                scaleX = lock * (1f - 0.4f * tick)
+                scaleY = lock * (1f - 0.4f * tick)
+                alpha = 1f - tick.coerceIn(0f, 1f)
+            },
+        )
+        Icon(
+            Icons.Rounded.CheckCircle,
+            null,
+            tint = color,
+            modifier = Modifier.size(size).graphicsLayer {
+                scaleX = tick
+                scaleY = tick
             },
         )
     }

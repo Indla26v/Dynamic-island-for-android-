@@ -20,9 +20,52 @@ import kotlin.math.PI
 import kotlin.math.sin
 
 /**
- * Unlocked: the fingerprint's ridges trace in (or the face frame draws and the eyes blink), a
- * scan line sweeps it, then the padlock's shackle springs open inside a burst ring. Not
- * recognised: the same trace, a hard side-to-side shake, and a ring with an × slams onto the lock.
+ * Unlocked, however it was unlocked: the padlock's shackle springs open, the lock melts into a
+ * round badge and a tick draws across it inside a burst ring.
+ */
+@Composable
+internal fun UnlockedScene(color: Color, modifier: Modifier) {
+    val p = rememberTimeline(1_600)
+    Canvas(modifier) {
+        val c = Offset(size.width - size.height / 2, size.height / 2)
+        val s = size.height * 0.3f
+        val open = overshoot(p.segment(0f, 0.32f), 0.35f)
+        val melt = p.segment(0.32f, 0.58f)
+        val r = size.height * 0.36f
+        // The body grows from the lock's rectangle into the round badge.
+        val bw = s * 1.6f + (2 * r - s * 1.6f) * melt
+        val bh = s * 1.2f + (2 * r - s * 1.2f) * melt
+        val bodyCenter = Offset(c.x, c.y + s * 0.45f * (1f - melt))
+        if (melt < 1f) {
+            val shackleR = s * 0.55f
+            val bodyTop = bodyCenter.y - bh / 2
+            val pivot = Offset(c.x + shackleR, bodyTop)
+            translate(0f, -s * 0.3f * open.coerceIn(0f, 1f)) {
+                rotate(-35f * open, pivot = pivot) {
+                    drawArc(color.copy(alpha = 1f - melt), 180f, 180f, false, Offset(c.x - shackleR, bodyTop - shackleR), Size(2 * shackleR, 2 * shackleR), style = Stroke(s * 0.22f, cap = StrokeCap.Round))
+                }
+            }
+        }
+        val burst = p.segment(0.55f, 1f)
+        if (burst in 0.01f..0.99f) drawCircle(color.copy(alpha = 0.8f * (1f - burst)), r * (1f + 0.7f * burst), c, style = Stroke(2.dp.toPx()))
+        glow(color, bodyCenter, r * 1.8f * p.segment(0.5f, 1f), 0.4f)
+        val corner = s * 0.25f + (r - s * 0.25f) * melt
+        drawRoundRect(color, Offset(bodyCenter.x - bw / 2, bodyCenter.y - bh / 2), Size(bw, bh), CornerRadius(corner))
+        // The keyhole closes up as the tick draws in.
+        if (melt < 1f) drawCircle(Color.Black.copy(alpha = 1f - melt), s * 0.15f, bodyCenter)
+        val tick = Path().apply {
+            moveTo(c.x - r * 0.45f, c.y + r * 0.02f)
+            lineTo(c.x - r * 0.1f, c.y + r * 0.36f)
+            lineTo(c.x + r * 0.5f, c.y - r * 0.32f)
+        }
+        tracePath(tick, p.segment(0.55f, 0.85f), Color.White, 2.6.dp.toPx())
+    }
+}
+
+/**
+ * Not recognised: the fingerprint's ridges trace in (or the face frame draws and the eyes
+ * blink), a scan line sweeps it, a hard side-to-side shake, and a ring with an × slams onto the
+ * lock.
  */
 @Composable
 internal fun UnlockScene(face: Boolean, ok: Boolean, color: Color, modifier: Modifier) {

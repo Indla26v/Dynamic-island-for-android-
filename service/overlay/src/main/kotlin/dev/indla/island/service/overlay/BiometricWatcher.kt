@@ -1,24 +1,17 @@
 package dev.indla.island.service.overlay
 
-import android.content.Context
-import android.content.pm.PackageManager
-import android.os.SystemClock
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import dev.indla.island.model.LiveContent
 import dev.indla.island.model.SystemEvent
 import dev.indla.island.ui.island.FACE
 
 /**
- * Face and fingerprint unlock glances. Android tells no app how the phone was unlocked, so:
- * a failed attempt is read from the lock screen's own spoken announcement ("Fingerprint not
- * recognized", "Face not recognised, try again"), and an unlock (USER_PRESENT) borrows the face
- * or fingerprint symbol from what the lock screen last said, else from the sensors the phone has.
+ * Unlock glances. Every unlock (USER_PRESENT: fingerprint, face, PIN or pattern alike) shows the
+ * same lock opening to a tick. A failed face or fingerprint attempt is read from the lock screen's
+ * own spoken announcement ("Fingerprint not recognized", "Face not recognised, try again").
  */
-internal class BiometricWatcher(context: Context, private val emit: (LiveContent.System) -> Unit) {
-    private val hasFace = context.packageManager.hasSystemFeature(PackageManager.FEATURE_FACE)
-    private val hasFingerprint = context.packageManager.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)
-    private var lastFace: Boolean? = null
-    private var lastSaidAt = 0L
+internal class BiometricWatcher(private val emit: (LiveContent.System) -> Unit) {
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
 
     fun onAnnouncement(event: AccessibilityEvent) {
@@ -27,8 +20,7 @@ internal class BiometricWatcher(context: Context, private val emit: (LiveContent
         val face = FACE_WORDS.containsMatchIn(said)
         val finger = FINGER_WORDS.containsMatchIn(said)
         if (!face && !finger) return
-        lastFace = face
-        lastSaidAt = SystemClock.uptimeMillis()
+        Log.i(TAG, "lock screen said: $said")
         if (FAILED.containsMatchIn(said)) {
             emit(LiveContent.System(SystemEvent.AUTH_FAILED, if (face) FACE else 0, if (face) "Face not recognised" else "Fingerprint not recognised"))
         }
@@ -39,16 +31,16 @@ internal class BiometricWatcher(context: Context, private val emit: (LiveContent
      * a glance raised then can be dropped or covered. Show it once the screen has settled.
      */
     fun onUnlocked() {
-        val recent = SystemClock.uptimeMillis() - lastSaidAt < RECENT_MS
-        val face = if (recent) lastFace == true else hasFace && !hasFingerprint
-        val glance = LiveContent.System(SystemEvent.UNLOCKED, if (face) FACE else 0, if (face) "Face" else if (hasFingerprint || !hasFace) "Fingerprint" else "Unlocked")
+        // One glance for every unlock (fingerprint, face, PIN, pattern): the lock opens to a tick.
+        val glance = LiveContent.System(SystemEvent.UNLOCKED, null, "Welcome back")
+        Log.i(TAG, "unlocked; showing the glance in ${SETTLE_MS}ms")
         handler.removeCallbacksAndMessages(null)
         handler.postDelayed({ emit(glance) }, SETTLE_MS)
     }
 
     private companion object {
+        const val TAG = "IslandBiometric"
         const val SYSTEM_UI = "com.android.systemui"
-        const val RECENT_MS = 15_000L
         const val SETTLE_MS = 600L
         val FACE_WORDS = Regex("""(?i)\bface\b""")
         val FINGER_WORDS = Regex("""(?i)fingerprint""")

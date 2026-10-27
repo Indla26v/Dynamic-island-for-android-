@@ -117,7 +117,7 @@ class IslandAccessibilityService : AccessibilityService() {
     private var systemEvents: SystemEventMonitor? = null
     private var lastNight: Boolean? = null
     private val copies = CopyWatcher { engine.onSystemEvent(it) }
-    private val biometrics by lazy { BiometricWatcher(this) { engine.onSystemEvent(it) } }
+    private val biometrics by lazy { BiometricWatcher { showAuthGlance(it) } }
     private val controls by lazy { ControlPress(this, scope) }
 
     override fun onServiceConnected() {
@@ -237,6 +237,23 @@ class IslandAccessibilityService : AccessibilityService() {
             it.copy(fullscreen = fullscreen, shadeOpen = !locked && (shade || shadeFromEvents), locked = locked)
         }
         if (debugLog) Log.d(TAG, "windows: statusBar=$statusBar shade=$shade -> ${engine.environment}")
+    }
+
+    /**
+     * An unlock arrives while the lock screen is still leaving; for a moment the island can read
+     * the screen as full screen or locked and drop the glance. Try again briefly until it shows.
+     */
+    private fun showAuthGlance(glance: LiveContent.System, attempt: Int = 0) {
+        engine.onSystemEvent(glance)
+        val s = engine.state.value
+        val shown = s.visible && (s.current?.live as? LiveContent.System)?.event == glance.event
+        Log.i(BIOMETRIC_TAG, "${glance.event} attempt ${attempt + 1}: shown=$shown, ${engine.environment}")
+        if (!shown && attempt < AUTH_RETRIES) {
+            scope.launch {
+                delay(AUTH_RETRY_MS)
+                showAuthGlance(glance, attempt + 1)
+            }
+        }
     }
 
     override fun onInterrupt() = Unit
@@ -562,7 +579,10 @@ class IslandAccessibilityService : AccessibilityService() {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
         }
-        ContextCompat.registerReceiver(this, screenReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        // Exported: USER_PRESENT is sent by SystemUI (the lock screen), not the system itself,
+        // and a non-exported receiver never hears it. All three are protected broadcasts, so no
+        // other app can send them.
+        ContextCompat.registerReceiver(this, screenReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
     }
 
     /**
@@ -621,6 +641,9 @@ class IslandAccessibilityService : AccessibilityService() {
     companion object {
         private const val SYSTEM_UI = "com.android.systemui"
         private const val TAG = "IslandOverlay"
+        private const val BIOMETRIC_TAG = "IslandBiometric"
+        private const val AUTH_RETRIES = 8
+        private const val AUTH_RETRY_MS = 250L
         private const val BLUR_SETTLE_MS = 320L
         private const val WINDOWS_COALESCE_MS = 48L
         private const val BLUR_RADIUS_DP = 28f

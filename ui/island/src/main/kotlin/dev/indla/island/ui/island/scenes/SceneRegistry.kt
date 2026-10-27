@@ -41,7 +41,8 @@ internal fun sceneWidth(event: SystemEvent): Float = when (event) {
     SystemEvent.BEDTIME_ON, SystemEvent.BEDTIME_OFF -> 84f
     SystemEvent.MONSTER_ON, SystemEvent.MONSTER_OFF -> 88f
     SystemEvent.EYE_ON, SystemEvent.EYE_OFF -> 64f
-    SystemEvent.UNLOCKED, SystemEvent.AUTH_FAILED -> 80f
+    SystemEvent.UNLOCKED -> 44f
+    SystemEvent.AUTH_FAILED -> 80f
     SystemEvent.RINGER_NORMAL, SystemEvent.RINGER_VIBRATE, SystemEvent.RINGER_SILENT -> 76f
     SystemEvent.DND_ON, SystemEvent.DND_OFF -> 64f
     SystemEvent.CLIPBOARD -> 64f
@@ -83,7 +84,7 @@ internal fun SystemScene(event: SystemEvent, args: SceneArgs, modifier: Modifier
         SystemEvent.RINGER_SILENT -> SilentScene(args, modifier)
         SystemEvent.HEADPHONES_CONNECTED -> AudioScene(args.device, connected = true, args.color, modifier)
         SystemEvent.HEADPHONES_DISCONNECTED -> AudioScene(args.device, connected = false, args.color, modifier)
-        SystemEvent.UNLOCKED -> UnlockScene(args.face, ok = true, args.color, modifier)
+        SystemEvent.UNLOCKED -> UnlockedScene(args.color, modifier)
         SystemEvent.AUTH_FAILED -> UnlockScene(args.face, ok = false, args.color, modifier)
         SystemEvent.CLIPBOARD -> ClipboardScene(args, modifier)
         SystemEvent.HOTSPOT_ON -> HotspotScene(on = true, args.color, modifier)

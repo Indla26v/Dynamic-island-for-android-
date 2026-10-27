@@ -37,7 +37,10 @@ internal abstract class BroadcastSignal(protected val context: Context, protecte
 
     override fun start() {
         val filter = IntentFilter().apply { actions.forEach(::addAction) }
-        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        // Exported: some of these come from system apps rather than the system itself (Bluetooth's
+        // from the Bluetooth app), which a non-exported receiver never hears. They're all
+        // protected broadcasts, so no other app can send them.
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
     }
 
     override fun stop() {
