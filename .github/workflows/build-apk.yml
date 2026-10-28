@@ -21,7 +21,10 @@ jobs:
         run: |
           SDKMANAGER=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
           yes | "$SDKMANAGER" --licenses > /dev/null || true
-          "$SDKMANAGER" "platforms;android-37" "platform-tools"
+          # Newer platforms are published as e.g. android-37.0, so look the name up.
+          PLATFORM=$("$SDKMANAGER" --list 2>/dev/null | grep -oE 'platforms;android-37[^ ]*' | sort -uV | head -1)
+          echo "Installing $PLATFORM"
+          "$SDKMANAGER" "$PLATFORM" "platform-tools"
 
       - uses: gradle/actions/setup-gradle@v4
 
